@@ -347,7 +347,7 @@ describe('signed URLs (SIGNING_SECRET)', () => {
 
   it('does not require signatures on discovery and health routes', async () => {
     expect((await get('/health', {}, {}, signed)).statusCode).toBe(200);
-    expect((await get('/', {}, {}, signed)).json().parameters.signature).toMatch(/Required/);
+    expect((await get('/', {}, {}, signed)).json().authentication.signature).toMatch(/Required/);
   });
 });
 
@@ -366,8 +366,15 @@ describe('GET /info', () => {
 });
 
 describe('misc routes', () => {
-  it('GET / lists endpoints', async () => {
-    expect((await get('/')).json().endpoints).toHaveProperty(['GET /process']);
+  it('GET / lists endpoints and the parameters each one accepts', async () => {
+    const body = (await get('/')).json();
+    expect(body.endpoints).toHaveProperty(['GET /process']);
+    expect(Object.keys(body.parameters)).toEqual(['/process', '/video/thumbnail', '/info']);
+    expect(body.parameters['/process'].width).toMatchObject({ type: 'integer', minimum: 1, maximum: 5000 });
+    expect(body.parameters['/process'].format).not.toHaveProperty('default');
+    expect(body.parameters['/video/thumbnail'].format.default).toBe('jpeg');
+    expect(body.parameters['/video/thumbnail'].time).toMatchObject({ default: 0, required: false });
+    expect(body.authentication).toHaveProperty('api_key | X-API-Key header');
   });
 
   it('GET /health reports job stats', async () => {

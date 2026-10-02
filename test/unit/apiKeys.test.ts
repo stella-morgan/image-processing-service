@@ -41,7 +41,6 @@ describe('ApiKeyRegistry', () => {
   it('resolves known keys to their client', () => {
     expect(registry.lookup(KEY_A)).toEqual({ name: 'partner', limit: 1000 });
     expect(registry.lookup(KEY_B)).toEqual({ name: 'internal', limit: undefined });
-    expect(registry.size).toBe(2);
   });
 
   it('returns undefined for unknown keys, including prefixes of real ones', () => {

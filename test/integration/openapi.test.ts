@@ -6,10 +6,23 @@ import { renderSpec, SPEC_FILE } from '../../scripts/generate-openapi.js';
 import { buildApp } from '../../src/app.js';
 import { ErrorBodySchema, ErrorCodes } from '../../src/lib/errors.js';
 import { MIME_TYPES } from '../../src/lib/imageProcessor.js';
-import { imageQuerySchema, infoQuerySchema, thumbnailQuerySchema } from '../../src/lib/params.js';
+import {
+  type CROP_MODES,
+  type GRAVITIES,
+  imageQuerySchema,
+  infoQuerySchema,
+  thumbnailQuerySchema,
+} from '../../src/lib/params.js';
 import { HealthSchema, ImageInfoSchema } from '../../src/lib/responses.js';
 import { buildOpenApiSpec } from '../../src/openapi.js';
-import type { ImageInfo as SdkImageInfo } from '../../src/sdk/index.js';
+import type {
+  CropMode as SdkCropMode,
+  Gravity as SdkGravity,
+  ImageInfo as SdkImageInfo,
+  OutputFormat as SdkOutputFormat,
+  ThumbnailOptions,
+  TransformOptions,
+} from '../../src/sdk/index.js';
 import { type FixtureServer, startFixtureServer } from '../helpers/fixtureServer.js';
 
 type Spec = {
@@ -107,5 +120,21 @@ describe('responses match their documented schemas', () => {
 
   it('the SDK ImageInfo type is the documented response type', () => {
     expectTypeOf<SdkImageInfo>().toEqualTypeOf<z.infer<typeof ImageInfoSchema>>();
+  });
+});
+
+describe('SDK option types match the server schemas', () => {
+  type ImageQuery = z.input<ReturnType<typeof imageQuerySchema>>;
+  type ThumbnailQuery = z.input<ReturnType<typeof thumbnailQuerySchema>>;
+
+  it('accepts exactly the parameters each route parses', () => {
+    expectTypeOf<keyof TransformOptions>().toEqualTypeOf<Exclude<keyof ImageQuery, 'url'>>();
+    expectTypeOf<keyof ThumbnailOptions>().toEqualTypeOf<Exclude<keyof ThumbnailQuery, 'url'>>();
+  });
+
+  it('offers exactly the allowed values', () => {
+    expectTypeOf<SdkOutputFormat>().toEqualTypeOf<NonNullable<ImageQuery['format']>>();
+    expectTypeOf<SdkCropMode>().toEqualTypeOf<(typeof CROP_MODES)[number]>();
+    expectTypeOf<SdkGravity>().toEqualTypeOf<(typeof GRAVITIES)[number]>();
   });
 });

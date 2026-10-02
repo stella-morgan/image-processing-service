@@ -51,7 +51,7 @@ export const ALIASES: Readonly<Record<string, string>> = {
   t: 'time',
 };
 
-export const AUTH_PARAMS = ['signature', 'api_key'] as const;
+const AUTH_PARAMS = ['signature', 'api_key'] as const;
 
 export const CASE_INSENSITIVE = new Set(['format', 'crop', 'gravity', 'background']);
 const FORMAT_VALUES = [...OUTPUT_FORMATS, 'jpg', 'auto'] as const;
@@ -187,7 +187,7 @@ function zodToApiError(error: z.ZodError): ApiError {
   return new ApiError('INVALID_PARAMETER', undefined, details);
 }
 
-export function parseSourceUrl(value: string): URL {
+function parseSourceUrl(value: string): URL {
   let url: URL;
   try {
     url = new URL(value);

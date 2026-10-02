@@ -1,11 +1,9 @@
 import swagger, { type StaticDocumentSpec } from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import type { FastifyInstance } from 'fastify';
-import type { Config } from './config.js';
-import { buildOpenApiSpec } from './openapi.js';
 
-export async function registerDocs(app: FastifyInstance, config: Config) {
-  const document = buildOpenApiSpec(config) as unknown as StaticDocumentSpec['document'];
+export async function registerDocs(app: FastifyInstance, spec: object) {
+  const document = spec as StaticDocumentSpec['document'];
   await app.register(swagger, { mode: 'static', specification: { document } });
   await app.register(swaggerUi, {
     routePrefix: '/docs',

@@ -215,3 +215,27 @@ export function buildOpenApiSpec(config: Pick<Config, 'maxDimension'>): Json {
     },
   };
 }
+
+export function parameterSummary(spec: Json): Record<string, Record<string, Json>> {
+  const { paths, components } = spec as {
+    paths: Record<string, { get: { parameters?: Json[] } }>;
+    components: { parameters: Record<string, Json> };
+  };
+  const resolve = (p: Json) => (typeof p.$ref === 'string' ? components.parameters[p.$ref.split('/').pop()!]! : p);
+
+  return Object.fromEntries(
+    Object.entries(paths)
+      .filter(([, item]) => item.get.parameters?.length)
+      .map(([path, item]) => [
+        path,
+        Object.fromEntries(
+          item.get
+            .parameters!.map(resolve)
+            .map(({ name, required, description, schema }) => [
+              name as string,
+              { required, description, ...(schema as Json) },
+            ]),
+        ),
+      ]),
+  );
+}

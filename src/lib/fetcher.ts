@@ -62,8 +62,7 @@ export function createSafeLookup(resolve: Resolver = dns.lookup as unknown as Re
   return (hostname, options, callback) => {
     resolve(hostname, { ...options, all: true }, (err, addresses) => {
       if (err) return callback(err, '', 0);
-      const list = addresses as dns.LookupAddress[];
-      const allowed = list.filter((a) => !isBlockedAddress(a.address));
+      const allowed = addresses.filter((a) => !isBlockedAddress(a.address));
       if (allowed.length === 0) {
         return callback(new BlockedAddressError(`Host "${hostname}" resolves to a private address`), '', 0);
       }

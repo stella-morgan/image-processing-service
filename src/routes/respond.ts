@@ -1,19 +1,12 @@
 import { createHash } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { ProcessedImage } from '../lib/imageProcessor.js';
+import { type ProcessedImage, preferredModernFormat } from '../lib/imageProcessor.js';
 import type { ImageTransform } from '../lib/params.js';
 import type { Services } from '../services.js';
 
 export interface CachedResult {
   image: ProcessedImage;
   etag: string;
-}
-
-function acceptBucket(accept: string | undefined): string {
-  const a = accept?.toLowerCase() ?? '';
-  if (a.includes('image/avif')) return 'avif';
-  if (a.includes('image/webp')) return 'webp';
-  return 'basic';
 }
 
 export function cacheKey(
@@ -28,7 +21,7 @@ export function cacheKey(
     url: url.href,
     ...transform,
     ...extra,
-    ...(transform.format === 'auto' ? { accept: acceptBucket(accept) } : {}),
+    ...(transform.format === 'auto' ? { accept: preferredModernFormat(accept) ?? 'basic' } : {}),
   });
 }
 

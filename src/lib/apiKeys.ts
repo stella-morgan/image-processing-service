@@ -57,10 +57,6 @@ export class ApiKeyRegistry {
   lookup(key: string): ApiClient | undefined {
     return this.clients.get(digest(key));
   }
-
-  get size(): number {
-    return this.clients.size;
-  }
 }
 
 export function redactSecrets(url: string): string {

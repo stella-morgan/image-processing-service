@@ -4,7 +4,7 @@ import { loadConfig } from '../src/config.js';
 import { buildOpenApiSpec } from '../src/openapi.js';
 
 export const SPEC_FILE = new URL('../openapi.yaml', import.meta.url);
-export const HEADER = '# Generated from the zod schemas by `npm run openapi`. Do not edit by hand.\n';
+const HEADER = '# Generated from the zod schemas by `npm run openapi`. Do not edit by hand.\n';
 
 export function renderSpec(): string {
   return HEADER + stringify(buildOpenApiSpec(loadConfig({})), { lineWidth: 0 });

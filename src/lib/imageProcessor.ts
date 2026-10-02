@@ -46,11 +46,15 @@ export interface ProcessOptions {
   sourceContentType?: string;
 }
 
-export function negotiateFormat(accept: string | undefined, hasAlpha: boolean): OutputFormat {
+export function preferredModernFormat(accept: string | undefined): 'avif' | 'webp' | undefined {
   const a = accept?.toLowerCase() ?? '';
   if (a.includes('image/avif')) return 'avif';
   if (a.includes('image/webp')) return 'webp';
-  return hasAlpha ? 'png' : 'jpeg';
+  return undefined;
+}
+
+export function negotiateFormat(accept: string | undefined, hasAlpha: boolean): OutputFormat {
+  return preferredModernFormat(accept) ?? (hasAlpha ? 'png' : 'jpeg');
 }
 
 function resolveFormat(
@@ -61,8 +65,7 @@ function resolveFormat(
 ): OutputFormat {
   if (requested === 'auto') return negotiateFormat(accept, hasAlpha);
   if (requested) return requested;
-  const normalized = inputFormat === 'jpg' ? 'jpeg' : inputFormat;
-  if (normalized && (OUTPUT_FORMATS as readonly string[]).includes(normalized)) return normalized as OutputFormat;
+  if (inputFormat && (OUTPUT_FORMATS as readonly string[]).includes(inputFormat)) return inputFormat as OutputFormat;
   return hasAlpha ? 'png' : 'jpeg';
 }
 
@@ -70,7 +73,7 @@ function parseBackground(value: string | undefined, format: OutputFormat) {
   if (!value) {
     return format === 'jpeg' ? { r: 255, g: 255, b: 255, alpha: 1 } : { r: 0, g: 0, b: 0, alpha: 0 };
   }
-  if (value.toLowerCase() === 'transparent') return { r: 0, g: 0, b: 0, alpha: 0 };
+  if (value === 'transparent') return { r: 0, g: 0, b: 0, alpha: 0 };
   return value.startsWith('#') ? value : `#${value}`;
 }
 

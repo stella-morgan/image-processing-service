@@ -3,9 +3,9 @@ import { type Config, loadConfig } from './config.js';
 import { registerDocs } from './docs.js';
 import { redactSecrets } from './lib/apiKeys.js';
 import { ApiError } from './lib/errors.js';
-import { CROP_MODES, GRAVITIES, OUTPUT_FORMATS } from './lib/params.js';
 import type { Health } from './lib/responses.js';
 import { verifySignature } from './lib/signing.js';
+import { buildOpenApiSpec, parameterSummary } from './openapi.js';
 import { registerRateLimit } from './rateLimit.js';
 import { processRoutes } from './routes/process.js';
 import { videoRoutes } from './routes/video.js';
@@ -27,6 +27,7 @@ const PROTECTED_ROUTES = new Set(['/process', '/video/thumbnail', '/info']);
 export async function buildApp(options: BuildOptions = {}): Promise<FastifyInstance> {
   const config: Config = { ...loadConfig(), ...options.config };
   const services = createServices(config);
+  const spec = buildOpenApiSpec(config);
 
   const app = Fastify({
     logger:
@@ -98,16 +99,8 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
       'GET /health': 'Liveness check.',
       'GET /docs': 'Interactive API documentation (Swagger UI). The raw spec is at /docs/json and /docs/yaml.',
     },
-    parameters: {
-      url: 'Absolute http(s) URL of the source asset (required).',
-      'width | w': `Target width in pixels (1-${config.maxDimension}).`,
-      'height | h': `Target height in pixels (1-${config.maxDimension}).`,
-      'format | f': `Output format: ${[...OUTPUT_FORMATS, 'jpg', 'auto'].join(', ')}. Defaults to the source format.`,
-      'quality | q': 'Output quality 1-100 (not for gif).',
-      'crop | c': `Resize mode: ${CROP_MODES.join(', ')}. Defaults to scale.`,
-      'gravity | g': `Anchor for crop=fill only: ${GRAVITIES.join(', ')}. Defaults to center.`,
-      'background | b': 'Hex colour (ff0000) or "transparent", for crop=pad or flattening to jpeg.',
-      'time | t': 'Video thumbnail only: timestamp in seconds. Defaults to 0.',
+    parameters: parameterSummary(spec),
+    authentication: {
       signature: config.signingSecret
         ? 'Required: HMAC-SHA256 of the request (see README).'
         : 'Not required (signing disabled).',
@@ -128,7 +121,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
     }),
   );
 
-  await registerDocs(app, config);
+  await registerDocs(app, spec);
   await app.register(processRoutes, { services });
   await app.register(videoRoutes, { services });
 
