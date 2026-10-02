@@ -27,6 +27,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run openapi:check
+      - run: npx --yes @redocly/cli@2.57.0 lint openapi.yaml
       - run: npm run test:coverage
       - run: npm run build
 

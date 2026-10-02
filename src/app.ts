@@ -128,7 +128,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
     }),
   );
 
-  await registerDocs(app);
+  await registerDocs(app, config);
   await app.register(processRoutes, { services });
   await app.register(videoRoutes, { services });
 

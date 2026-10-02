@@ -47,18 +47,19 @@ Every URL can also go straight into a browser or an `<img src>` tag.
 | `npm run test:coverage` | Runs the tests with coverage; fails below the thresholds in `vitest.config.ts` |
 | `TEST_REDIS_URL=redis://localhost:6379 npm test` | Also runs the Redis rate-limit test (start Redis with `docker run -p 6379:6379 redis:8`) |
 | `docker compose up --build` | Two instances (ports 3001 and 3002) sharing rate limits through Redis |
+| `npm run openapi` | Regenerates `openapi.yaml` from the zod schemas (`npm run openapi:check` verifies it's current) |
 | `npm run lint` | Biome lint and format check (`npm run lint:fix` to apply fixes) |
 | `npm run typecheck` | Runs the TypeScript type check |
 | `npm run build && npm start` | Production build and run |
 | `docker build -t image-service . && docker run -p 3000:3000 image-service` | Runs in Docker |
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests with coverage (against a Redis service) and a build on Node 22, 24 and 26. It then builds the Docker image and smoke-tests `/health`.
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, an OpenAPI freshness check and validation, tests with coverage (against a Redis service) and a build on Node 22, 24 and 26. It then builds the Docker image and smoke-tests `/health`.
 
 ---
 
 ## API reference
 
-Interactive documentation is served at **`/docs`** (Swagger UI). The OpenAPI 3.1 spec it renders is [`openapi.yaml`](openapi.yaml), also served at `/docs/json` and `/docs/yaml`. That's useful for generating clients in other languages. The spec's `servers` entry is set to whichever host serves it, so "Try it out" works on any port or domain. `GET /` also returns a summary of all endpoints and parameters.
+Interactive documentation is served at **`/docs`** (Swagger UI). The OpenAPI 3.1 spec is **generated from the same zod schemas that validate requests** (see [How the spec is generated](#how-the-spec-is-generated)). It's served at `/docs/json` and `/docs/yaml`, and committed as [`openapi.yaml`](openapi.yaml). That's useful for generating clients in other languages. The spec's `servers` entry is set to whichever host serves it, so "Try it out" works on any port or domain. `GET /` also returns a summary of all endpoints and parameters.
 
 ### `GET /process`
 
@@ -111,7 +112,24 @@ Returns metadata about an image without transforming it. This helps a client dec
 
 ### `GET /docs`
 
-Swagger UI, with no signature required even when signing is enabled. The test suite checks that every parameter documented in the spec is accepted by the server, so a renamed or removed parameter fails CI instead of leaving the docs wrong.
+Swagger UI, with no signature required even when signing is enabled. The spec is built from the running configuration, so a server started with `MAX_DIMENSION=2000` documents a maximum width of 2000.
+
+#### How the spec is generated
+
+[`src/openapi.ts`](src/openapi.ts) builds the spec with zod's `z.toJSONSchema()`.
+
+- **Generated from the zod schemas.** Every query parameter: its name, type, range, allowed values, default, whether it's required, its description and its alias. The `/info`, `/health` and error response bodies. The full list of error codes. The image content types.
+- **Declared by hand in `openapi.ts`.** Which status codes each route returns, the response headers, and the security schemes. Zod has no way to describe these.
+
+**What stops the spec and the code drifting apart:**
+
+| If you… | What fails |
+| --- | --- |
+| Add, rename or change a parameter without running `npm run openapi` | The test comparing `openapi.yaml` with a fresh render, and `npm run openapi:check` in CI |
+| Return a field from `/info` or `/health` that isn't in its schema | The TypeScript build, because the routes are typed from the schemas |
+| Let the SDK's `ImageInfo` type differ from the documented one | The TypeScript build, through a type-level test |
+| Add an error code | Nothing to update: the code list is read from the error catalogue |
+| Break the OpenAPI structure | Redocly validation in CI |
 
 ### `GET /health`
 
@@ -298,7 +316,8 @@ Set these with environment variables (see `.env.example`). They are validated at
 src/
   app.ts                 Fastify app factory: signature check, error handler, routes, discovery endpoint
   rateLimit.ts           API key resolution and per-client rate limiting (memory or Redis)
-  docs.ts                Swagger UI at /docs, served from openapi.yaml
+  openapi.ts             Builds the OpenAPI spec from the zod schemas
+  docs.ts                Swagger UI at /docs, serving the generated spec
   index.ts               Entry point and graceful shutdown
   config.ts              Validated env configuration
   services.ts            Dependency wiring (fetcher, cache, limiter, in-flight jobs)
@@ -315,15 +334,18 @@ src/
     videoThumbnail.ts    Container detection and ffmpeg frame extraction
     cache.ts             LRU cache bounded by entries, bytes and TTL
     limiter.ts           Concurrency limiter with a bounded queue
-    errors.ts            ApiError and the error-code catalogue
+    errors.ts            ApiError, the error-code catalogue and the error body schema
+    responses.ts         zod schemas for the /info and /health response bodies
   sdk/
     index.ts             Typed client SDK
     signer.ts            Node-only request signer for the SDK
 test/
   unit/                  Params, config, errors, SSRF checks, DNS guard, signing, API keys, cache, limiter, container detection
-  integration/           HTTP tests per endpoint against a local fixture server, rate limits, SDK, docs
+  integration/           HTTP tests per endpoint against a local fixture server, rate limits, SDK, docs, spec drift
   helpers/               Fixture server and generated test videos
-openapi.yaml             OpenAPI 3.1 spec (rendered at /docs)
+scripts/
+  generate-openapi.ts    Writes openapi.yaml (`npm run openapi`) or checks it is current (`--check`)
+openapi.yaml             Generated OpenAPI 3.1 spec; do not edit by hand
 docker-compose.yml       Two instances sharing rate limits through Redis
 ```
 
@@ -333,7 +355,7 @@ docker-compose.yml       Two instances sharing rate limits through Redis
 npm test
 ```
 
-The suite has **229 tests**. 228 run in a few seconds without network access, with about 97% line coverage. The last one checks that two instances share one limit through a real Redis; it runs when `TEST_REDIS_URL` is set, as it is in CI. The integration tests start a local HTTP server that serves images and videos generated at startup with sharp and ffmpeg.
+The suite has **239 tests**. 238 run in a few seconds without network access, with about 97% line coverage. The last one checks that two instances share one limit through a real Redis; it runs when `TEST_REDIS_URL` is set, as it is in CI. The integration tests start a local HTTP server that serves images and videos generated at startup with sharp and ffmpeg.
 
 The fixture server also serves failure cases:
 - 404, 500, HTML, corrupt bytes and an empty body
@@ -370,6 +392,7 @@ Each test sends a real request through `app.inject` and checks the output by dec
 - **Video.** The download is written to a temp file instead of piped into ffmpeg, because many MP4s keep their index (`moov` atom) at the end and need seeking. If `time` is past the end of the video, the client gets a 400 that tells them the actual duration.
 - **Defaults follow Cloudinary** (`crop=scale`, source format kept), so people who know Cloudinary don't get surprises.
 - **Linting.** Biome is used instead of ESLint because `typescript-eslint` doesn't support TypeScript 7 yet.
+- **The OpenAPI spec is generated** from the zod schemas rather than written by hand. When it was first generated, it showed the hand-written spec had already drifted: it said thumbnails keep the source format (they default to JPEG); it left out error responses `/info` and `/video/thumbnail` really return; and it didn't mark response fields as required. Response schemas allow additional properties on purpose, so adding a field later doesn't break strictly validating clients.
 - **Rate limiting** uses the official `@fastify/rate-limit` plugin rather than a hand-written counter. It gets IPv6 grouping, the standard headers and the Redis store right. Requests are counted before the cache, so limits are predictable, and response timing can't reveal what other clients have cached.
 
 ### Possible next steps

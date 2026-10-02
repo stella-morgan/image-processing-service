@@ -1,12 +1,12 @@
-import { fileURLToPath } from 'node:url';
-import swagger from '@fastify/swagger';
+import swagger, { type StaticDocumentSpec } from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import type { FastifyInstance } from 'fastify';
+import type { Config } from './config.js';
+import { buildOpenApiSpec } from './openapi.js';
 
-const SPEC_PATH = fileURLToPath(new URL('../openapi.yaml', import.meta.url));
-
-export async function registerDocs(app: FastifyInstance) {
-  await app.register(swagger, { mode: 'static', specification: { path: SPEC_PATH, baseDir: '' } });
+export async function registerDocs(app: FastifyInstance, config: Config) {
+  const document = buildOpenApiSpec(config) as unknown as StaticDocumentSpec['document'];
+  await app.register(swagger, { mode: 'static', specification: { document } });
   await app.register(swaggerUi, {
     routePrefix: '/docs',
     uiConfig: { docExpansion: 'list', deepLinking: true, tryItOutEnabled: true },

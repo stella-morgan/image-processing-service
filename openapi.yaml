@@ -1,3 +1,4 @@
+# Generated from the zod schemas by `npm run openapi`. Do not edit by hand.
 openapi: 3.1.0
 info:
   title: Image Processing Service
@@ -8,7 +9,6 @@ info:
   description: Cloudinary-style on-the-fly image transformation and video thumbnail API.
 servers:
   - url: http://localhost:3000
-
 security:
   - {}
   - apiKeyHeader: []
@@ -18,113 +18,129 @@ security:
     urlSignature: []
   - apiKeyQuery: []
     urlSignature: []
-
 paths:
   /process:
     get:
       summary: Resize, crop and convert a remote image
       operationId: processImage
       parameters:
-        - $ref: '#/components/parameters/url'
-        - $ref: '#/components/parameters/width'
-        - $ref: '#/components/parameters/height'
-        - $ref: '#/components/parameters/format'
-        - $ref: '#/components/parameters/quality'
-        - $ref: '#/components/parameters/crop'
-        - $ref: '#/components/parameters/gravity'
-        - $ref: '#/components/parameters/background'
-      responses:
-        '200': { $ref: '#/components/responses/Image' }
-        '304': { description: Not modified (If-None-Match matched the ETag). }
-        '400': { $ref: '#/components/responses/Error' }
-        '401': { $ref: '#/components/responses/Error' }
-        '403': { $ref: '#/components/responses/Error' }
-        '404': { $ref: '#/components/responses/Error' }
-        '413': { $ref: '#/components/responses/Error' }
-        '415': { $ref: '#/components/responses/Error' }
-        '422': { $ref: '#/components/responses/Error' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-        '502': { $ref: '#/components/responses/Error' }
-        '503': { $ref: '#/components/responses/Busy' }
-        '504': { $ref: '#/components/responses/Error' }
-
+        - $ref: "#/components/parameters/url"
+        - $ref: "#/components/parameters/width"
+        - $ref: "#/components/parameters/height"
+        - $ref: "#/components/parameters/format"
+        - $ref: "#/components/parameters/quality"
+        - $ref: "#/components/parameters/crop"
+        - $ref: "#/components/parameters/gravity"
+        - $ref: "#/components/parameters/background"
+      responses: &a1
+        "200":
+          $ref: "#/components/responses/Image"
+        "304":
+          description: Not modified (If-None-Match matched the ETag).
+        "400": &a2
+          $ref: "#/components/responses/Error"
+        "401": &a3
+          $ref: "#/components/responses/Error"
+        "403": &a4
+          $ref: "#/components/responses/Error"
+        "404": &a5
+          $ref: "#/components/responses/Error"
+        "413": &a6
+          $ref: "#/components/responses/Error"
+        "415": &a7
+          $ref: "#/components/responses/Error"
+        "422": &a8
+          $ref: "#/components/responses/Error"
+        "429": &a9
+          $ref: "#/components/responses/RateLimited"
+        "502": &a10
+          $ref: "#/components/responses/Error"
+        "503": &a11
+          $ref: "#/components/responses/Busy"
+        "504": &a12
+          $ref: "#/components/responses/Error"
   /video/thumbnail:
     get:
       summary: Extract a frame from a remote video
       description: Accepts every /process parameter plus `time`. Output defaults to JPEG.
       operationId: videoThumbnail
       parameters:
-        - $ref: '#/components/parameters/url'
+        - $ref: "#/components/parameters/url"
+        - $ref: "#/components/parameters/width"
+        - $ref: "#/components/parameters/height"
+        - name: format
+          in: query
+          required: false
+          description: Output format. `auto` picks AVIF, then WebP, then JPEG/PNG from the Accept header. Case-insensitive. Alias `f`.
+          schema:
+            default: jpeg
+            type: string
+            enum:
+              - jpeg
+              - png
+              - webp
+              - avif
+              - gif
+              - tiff
+              - jpg
+              - auto
+        - $ref: "#/components/parameters/quality"
+        - $ref: "#/components/parameters/crop"
+        - $ref: "#/components/parameters/gravity"
+        - $ref: "#/components/parameters/background"
         - name: time
           in: query
-          description: Timestamp in seconds. Alias `t`.
-          schema: { type: number, minimum: 0, maximum: 86400, default: 0 }
-        - $ref: '#/components/parameters/width'
-        - $ref: '#/components/parameters/height'
-        - $ref: '#/components/parameters/format'
-        - $ref: '#/components/parameters/quality'
-        - $ref: '#/components/parameters/crop'
-        - $ref: '#/components/parameters/gravity'
-        - $ref: '#/components/parameters/background'
-      responses:
-        '200': { $ref: '#/components/responses/Image' }
-        '304': { description: Not modified. }
-        '400': { $ref: '#/components/responses/Error' }
-        '401': { $ref: '#/components/responses/Error' }
-        '403': { $ref: '#/components/responses/Error' }
-        '415': { $ref: '#/components/responses/Error' }
-        '422': { $ref: '#/components/responses/Error' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-        '503': { $ref: '#/components/responses/Busy' }
-
+          required: false
+          description: Timestamp of the frame, in seconds. Decimals are allowed. Alias `t`.
+          schema:
+            default: 0
+            type: number
+            minimum: 0
+            maximum: 86400
+      responses: *a1
   /info:
     get:
       summary: Metadata for a remote image
       operationId: imageInfo
       parameters:
-        - $ref: '#/components/parameters/url'
+        - $ref: "#/components/parameters/url"
       responses:
-        '200':
+        "200":
           description: Image metadata
           headers:
-            RateLimit-Limit: { $ref: '#/components/headers/RateLimit-Limit' }
-            RateLimit-Remaining: { $ref: '#/components/headers/RateLimit-Remaining' }
-            RateLimit-Reset: { $ref: '#/components/headers/RateLimit-Reset' }
+            RateLimit-Limit: &a13
+              $ref: "#/components/headers/RateLimit-Limit"
+            RateLimit-Remaining: &a14
+              $ref: "#/components/headers/RateLimit-Remaining"
+            RateLimit-Reset: &a15
+              $ref: "#/components/headers/RateLimit-Reset"
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ImageInfo' }
-        '400': { $ref: '#/components/responses/Error' }
-        '401': { $ref: '#/components/responses/Error' }
-        '422': { $ref: '#/components/responses/Error' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-
+              schema:
+                $ref: "#/components/schemas/ImageInfo"
+        "400": *a2
+        "401": *a3
+        "403": *a4
+        "404": *a5
+        "413": *a6
+        "415": *a7
+        "422": *a8
+        "429": *a9
+        "502": *a10
+        "503": *a11
+        "504": *a12
   /health:
     get:
       summary: Liveness probe
       operationId: health
       security: []
       responses:
-        '200':
+        "200":
           description: Service is up
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status: { type: string, const: ok }
-                  uptimeSeconds: { type: integer }
-                  jobs:
-                    type: object
-                    properties:
-                      active: { type: integer }
-                      queued: { type: integer }
-                  rateLimit:
-                    type: object
-                    properties:
-                      enabled: { type: boolean }
-                      store: { type: string, enum: [memory, redis] }
-                      connected: { type: boolean }
-
+                $ref: "#/components/schemas/Health"
 components:
   securitySchemes:
     apiKeyHeader:
@@ -142,119 +158,203 @@ components:
       in: query
       name: signature
       description: Required only when the server has SIGNING_SECRET set. base64url HMAC-SHA256 of the canonical request (see README).
-
   parameters:
     url:
       name: url
       in: query
       required: true
       description: Absolute http(s) URL of the source asset.
-      schema: { type: string, format: uri }
+      schema:
+        type: string
+        minLength: 1
+        format: uri
     width:
       name: width
       in: query
+      required: false
       description: Target width in pixels. Alias `w`.
-      schema: { type: integer, minimum: 1, maximum: 5000 }
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 5000
     height:
       name: height
       in: query
+      required: false
       description: Target height in pixels. Alias `h`.
-      schema: { type: integer, minimum: 1, maximum: 5000 }
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 5000
     format:
       name: format
       in: query
-      description: Output format. `auto` negotiates AVIF/WebP from the Accept header. Alias `f`.
-      schema: { type: string, enum: [jpeg, jpg, png, webp, avif, gif, tiff, auto] }
+      required: false
+      description: Output format. `auto` picks AVIF, then WebP, then JPEG/PNG from the Accept header. Defaults to the source format. Case-insensitive. Alias `f`.
+      schema:
+        type: string
+        enum:
+          - jpeg
+          - png
+          - webp
+          - avif
+          - gif
+          - tiff
+          - jpg
+          - auto
     quality:
       name: quality
       in: query
-      description: Lossy quality. Not supported for gif. Alias `q`.
-      schema: { type: integer, minimum: 1, maximum: 100 }
+      required: false
+      description: Lossy quality. For PNG it enables palette quantisation. Not supported for gif. Alias `q`.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
     crop:
       name: crop
       in: query
-      description: Resize mode (Cloudinary semantics). fill and pad require both width and height. Alias `c`.
-      schema: { type: string, enum: [scale, fit, limit, fill, pad], default: scale }
+      required: false
+      description: How the image is fitted into width x height (Cloudinary semantics). `fill` and `pad` require both dimensions. Case-insensitive. Alias `c`.
+      schema:
+        default: scale
+        type: string
+        enum:
+          - scale
+          - fit
+          - limit
+          - fill
+          - pad
     gravity:
       name: gravity
       in: query
-      description: Anchor for crop=fill only. Alias `g`.
+      required: false
+      description: Which part to keep when crop=fill cuts the image. `auto` keeps the most interesting region. Case-insensitive. Alias `g`.
       schema:
-        type: string
-        enum: [center, north, south, east, west, northeast, northwest, southeast, southwest, auto]
         default: center
+        type: string
+        enum:
+          - center
+          - north
+          - south
+          - east
+          - west
+          - northeast
+          - northwest
+          - southeast
+          - southwest
+          - auto
     background:
       name: background
       in: query
-      description: Hex colour or `transparent`. Only for crop=pad or format=jpeg/auto. Alias `b`.
-      schema: { type: string, pattern: '^(transparent|#?([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8}))$' }
-
+      required: false
+      description: Hex colour or `transparent`, for crop=pad or flattening transparency into format=jpeg/auto. Case-insensitive. Alias `b`.
+      schema:
+        type: string
+        pattern: ^(transparent|#?([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8}))$
   headers:
-    ETag: { schema: { type: string } }
-    X-Cache: { schema: { type: string, enum: [HIT, MISS, COALESCED] } }
-    X-Image-Width: { schema: { type: integer } }
-    X-Image-Height: { schema: { type: integer } }
-    X-Request-Id: { schema: { type: string } }
+    ETag:
+      schema:
+        type: string
+    X-Cache:
+      schema:
+        type: string
+        enum:
+          - HIT
+          - MISS
+          - COALESCED
+    X-Image-Width:
+      schema:
+        type: integer
+    X-Image-Height:
+      schema:
+        type: integer
+    X-Request-Id:
+      schema:
+        type: string
     RateLimit-Limit:
       description: Requests allowed per window for this client.
-      schema: { type: integer }
+      schema:
+        type: integer
     RateLimit-Remaining:
       description: Requests left in the current window.
-      schema: { type: integer }
+      schema:
+        type: integer
     RateLimit-Reset:
       description: Seconds until the window resets.
-      schema: { type: integer }
-
+      schema:
+        type: integer
   responses:
     Image:
       description: The processed image
       headers:
-        ETag: { $ref: '#/components/headers/ETag' }
-        X-Cache: { $ref: '#/components/headers/X-Cache' }
-        X-Image-Width: { $ref: '#/components/headers/X-Image-Width' }
-        X-Image-Height: { $ref: '#/components/headers/X-Image-Height' }
-        X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
-        RateLimit-Limit: { $ref: '#/components/headers/RateLimit-Limit' }
-        RateLimit-Remaining: { $ref: '#/components/headers/RateLimit-Remaining' }
-        RateLimit-Reset: { $ref: '#/components/headers/RateLimit-Reset' }
+        ETag:
+          $ref: "#/components/headers/ETag"
+        X-Cache:
+          $ref: "#/components/headers/X-Cache"
+        X-Image-Width:
+          $ref: "#/components/headers/X-Image-Width"
+        X-Image-Height:
+          $ref: "#/components/headers/X-Image-Height"
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+        RateLimit-Limit: *a13
+        RateLimit-Remaining: *a14
+        RateLimit-Reset: *a15
       content:
-        image/jpeg: { schema: { type: string, format: binary } }
-        image/png: { schema: { type: string, format: binary } }
-        image/webp: { schema: { type: string, format: binary } }
-        image/avif: { schema: { type: string, format: binary } }
-        image/gif: { schema: { type: string, format: binary } }
-        image/tiff: { schema: { type: string, format: binary } }
+        image/jpeg:
+          schema:
+            type: string
+            format: binary
+        image/png:
+          schema:
+            type: string
+            format: binary
+        image/webp:
+          schema:
+            type: string
+            format: binary
+        image/avif:
+          schema:
+            type: string
+            format: binary
+        image/gif:
+          schema:
+            type: string
+            format: binary
+        image/tiff:
+          schema:
+            type: string
+            format: binary
     Error:
       description: Error
-      content:
+      content: &a16
         application/json:
-          schema: { $ref: '#/components/schemas/Error' }
+          schema:
+            $ref: "#/components/schemas/Error"
     RateLimited:
       description: Rate limit exceeded for this client
       headers:
-        Retry-After: { schema: { type: integer } }
-        RateLimit-Limit: { $ref: '#/components/headers/RateLimit-Limit' }
-        RateLimit-Remaining: { $ref: '#/components/headers/RateLimit-Remaining' }
-        RateLimit-Reset: { $ref: '#/components/headers/RateLimit-Reset' }
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/Error' }
+        Retry-After:
+          schema:
+            type: integer
+        RateLimit-Limit: *a13
+        RateLimit-Remaining: *a14
+        RateLimit-Reset: *a15
+      content: *a16
     Busy:
       description: Server at capacity
       headers:
-        Retry-After: { schema: { type: integer } }
-      content:
-        application/json:
-          schema: { $ref: '#/components/schemas/Error' }
-
+        Retry-After:
+          schema:
+            type: integer
+      content: *a16
   schemas:
     Error:
       type: object
-      required: [error]
       properties:
         error:
           type: object
-          required: [code, message]
           properties:
             code:
               type: string
@@ -274,22 +374,107 @@ components:
                 - SOURCE_TIMEOUT
                 - INTERNAL_ERROR
                 - SERVER_BUSY
-            message: { type: string }
+            message:
+              type: string
             details:
+              description: Present when specific parameters caused the error.
               type: array
               items:
                 type: object
                 properties:
-                  field: { type: string }
-                  message: { type: string }
+                  field:
+                    type: string
+                  message:
+                    type: string
+                required:
+                  - message
+          required:
+            - code
+            - message
+      required:
+        - error
     ImageInfo:
       type: object
       properties:
-        url: { type: string }
-        format: { type: string }
-        width: { type: integer }
-        height: { type: integer }
-        bytes: { type: integer }
-        hasAlpha: { type: boolean }
-        pages: { type: integer }
-        orientation: { type: [integer, 'null'] }
+        url:
+          type: string
+          description: Final URL of the source, after redirects.
+        format:
+          type: string
+          description: Detected image format, e.g. jpeg or png.
+        width:
+          type: integer
+          minimum: 0
+        height:
+          type: integer
+          minimum: 0
+          description: Height of one frame for animated images.
+        bytes:
+          type: integer
+          minimum: 0
+          description: Size of the source in bytes.
+        hasAlpha:
+          type: boolean
+        pages:
+          type: integer
+          minimum: 0
+          description: Number of frames; 1 unless animated.
+        orientation:
+          description: EXIF orientation, if present.
+          type:
+            - integer
+            - "null"
+      required:
+        - url
+        - format
+        - width
+        - height
+        - bytes
+        - hasAlpha
+        - pages
+        - orientation
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          const: ok
+        uptimeSeconds:
+          type: integer
+          minimum: 0
+        jobs:
+          type: object
+          properties:
+            active:
+              type: integer
+              minimum: 0
+              description: Fetch + transform jobs running now.
+            queued:
+              type: integer
+              minimum: 0
+              description: Jobs waiting for a free slot.
+          required:
+            - active
+            - queued
+        rateLimit:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            store:
+              type: string
+              enum:
+                - memory
+                - redis
+            connected:
+              type: boolean
+              description: False while the Redis store is unreachable; requests are then not limited.
+          required:
+            - enabled
+            - store
+            - connected
+      required:
+        - status
+        - uptimeSeconds
+        - jobs
+        - rateLimit
