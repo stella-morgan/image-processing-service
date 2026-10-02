@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export const ErrorCodes = {
   INVALID_PARAMETER: { status: 400, message: 'One or more query parameters are invalid.' },
   INVALID_URL: { status: 400, message: 'The source URL is invalid.' },
@@ -18,10 +20,19 @@ export const ErrorCodes = {
 
 export type ErrorCode = keyof typeof ErrorCodes;
 
-export interface ErrorDetail {
-  field?: string;
-  message: string;
-}
+export const ErrorBodySchema = z.object({
+  error: z.object({
+    code: z.enum(Object.keys(ErrorCodes) as [ErrorCode, ...ErrorCode[]]),
+    message: z.string(),
+    details: z
+      .array(z.object({ field: z.string().optional(), message: z.string() }))
+      .optional()
+      .meta({ description: 'Present when specific parameters caused the error.' }),
+  }),
+});
+
+export type ErrorBody = z.infer<typeof ErrorBodySchema>;
+export type ErrorDetail = NonNullable<ErrorBody['error']['details']>[number];
 
 export class ApiError extends Error {
   readonly code: ErrorCode;
@@ -36,7 +47,7 @@ export class ApiError extends Error {
     this.details = details;
   }
 
-  toJSON() {
+  toJSON(): ErrorBody {
     return {
       error: {
         code: this.code,

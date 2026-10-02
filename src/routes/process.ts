@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import { ApiError } from '../lib/errors.js';
 import { processImage } from '../lib/imageProcessor.js';
 import { parseInfoParams, parseProcessParams } from '../lib/params.js';
+import type { ImageInfo } from '../lib/responses.js';
 import type { Services } from '../services.js';
 import { cacheKey, sendCachedImage } from './respond.js';
 
@@ -20,7 +21,7 @@ export async function processRoutes(app: FastifyInstance, { services }: { servic
 
   app.get('/info', async (request, reply) => {
     const url = parseInfoParams(request.query);
-    const info = await services.limiter.run(async () => {
+    const info = await services.limiter.run(async (): Promise<ImageInfo> => {
       const source = await services.fetcher.fetch(url);
       try {
         const m = await sharp(source.body).metadata();

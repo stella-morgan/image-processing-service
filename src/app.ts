@@ -4,6 +4,7 @@ import { registerDocs } from './docs.js';
 import { redactSecrets } from './lib/apiKeys.js';
 import { ApiError } from './lib/errors.js';
 import { CROP_MODES, GRAVITIES, OUTPUT_FORMATS } from './lib/params.js';
+import type { Health } from './lib/responses.js';
 import { verifySignature } from './lib/signing.js';
 import { registerRateLimit } from './rateLimit.js';
 import { processRoutes } from './routes/process.js';
@@ -117,12 +118,15 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
     example: '/process?url=https://picsum.photos/id/237/1200/800.jpg&width=500&height=300&crop=fill&format=webp',
   }));
 
-  app.get('/health', async () => ({
-    status: 'ok',
-    uptimeSeconds: Math.round(process.uptime()),
-    jobs: services.limiter.stats,
-    rateLimit: rateLimitStatus(),
-  }));
+  app.get(
+    '/health',
+    async (): Promise<Health> => ({
+      status: 'ok',
+      uptimeSeconds: Math.round(process.uptime()),
+      jobs: services.limiter.stats,
+      rateLimit: rateLimitStatus(),
+    }),
+  );
 
   await registerDocs(app);
   await app.register(processRoutes, { services });

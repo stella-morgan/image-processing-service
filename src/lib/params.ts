@@ -40,7 +40,7 @@ export interface ThumbnailParams extends ProcessParams {
   time: number;
 }
 
-const ALIASES: Record<string, string> = {
+export const ALIASES: Readonly<Record<string, string>> = {
   w: 'width',
   h: 'height',
   f: 'format',
@@ -51,71 +51,86 @@ const ALIASES: Record<string, string> = {
   t: 'time',
 };
 
-const INFO_KEYS = ['url', 'signature', 'api_key'];
-const IMAGE_KEYS = [...INFO_KEYS, 'width', 'height', 'format', 'quality', 'crop', 'gravity', 'background'];
-const VIDEO_KEYS = [...IMAGE_KEYS, 'time'];
+export const AUTH_PARAMS = ['signature', 'api_key'] as const;
 
-const HEX_COLOR = /^#?([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+export const CASE_INSENSITIVE = new Set(['format', 'crop', 'gravity', 'background']);
+const FORMAT_VALUES = [...OUTPUT_FORMATS, 'jpg', 'auto'] as const;
+const HEX_OR_TRANSPARENT = /^(transparent|#?([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8}))$/;
 
-function dimension(max: number) {
+const sourceUrl = z
+  .string({ message: 'is required' })
+  .min(1, 'is required')
+  .meta({ description: 'Absolute http(s) URL of the source asset.', format: 'uri' });
+
+function dimension(max: number, description: string) {
   return z.coerce
     .number({ message: 'must be a number' })
     .int('must be a whole number')
     .min(1, 'must be at least 1')
     .max(max, `must be at most ${max}`)
-    .optional();
+    .optional()
+    .meta({ description });
 }
 
-function buildImageSchema(maxDimension: number) {
+function format(description: string) {
+  return z.enum(FORMAT_VALUES, { message: `must be one of: ${FORMAT_VALUES.join(', ')}` }).meta({ description });
+}
+
+export function imageQuerySchema(maxDimension: number) {
   return z.object({
-    url: z.string({ message: 'is required' }).min(1, 'is required'),
-    width: dimension(maxDimension),
-    height: dimension(maxDimension),
-    format: z
-      .string()
-      .toLowerCase()
-      .transform((v) => (v === 'jpg' ? 'jpeg' : v))
-      .pipe(
-        z.enum([...OUTPUT_FORMATS, 'auto'], {
-          message: `must be one of: ${[...OUTPUT_FORMATS, 'jpg', 'auto'].join(', ')}`,
-        }),
-      )
-      .optional(),
+    url: sourceUrl,
+    width: dimension(maxDimension, 'Target width in pixels.'),
+    height: dimension(maxDimension, 'Target height in pixels.'),
+    format: format(
+      'Output format. `auto` picks AVIF, then WebP, then JPEG/PNG from the Accept header. Defaults to the source format.',
+    ).optional(),
     quality: z.coerce
       .number({ message: 'must be a number' })
       .int('must be a whole number')
       .min(1, 'must be between 1 and 100')
       .max(100, 'must be between 1 and 100')
-      .optional(),
+      .optional()
+      .meta({ description: 'Lossy quality. For PNG it enables palette quantisation. Not supported for gif.' }),
     crop: z
-      .string()
-      .toLowerCase()
-      .pipe(z.enum(CROP_MODES, { message: `must be one of: ${CROP_MODES.join(', ')}` }))
-      .default('scale'),
+      .enum(CROP_MODES, { message: `must be one of: ${CROP_MODES.join(', ')}` })
+      .default('scale')
+      .meta({
+        description:
+          'How the image is fitted into width x height (Cloudinary semantics). `fill` and `pad` require both dimensions.',
+      }),
     gravity: z
-      .string()
-      .toLowerCase()
-      .pipe(z.enum(GRAVITIES, { message: `must be one of: ${GRAVITIES.join(', ')}` }))
-      .default('center'),
+      .enum(GRAVITIES, { message: `must be one of: ${GRAVITIES.join(', ')}` })
+      .default('center')
+      .meta({
+        description: 'Which part to keep when crop=fill cuts the image. `auto` keeps the most interesting region.',
+      }),
     background: z
       .string()
-      .refine(
-        (v) => v.toLowerCase() === 'transparent' || HEX_COLOR.test(v),
-        'must be a hex color (e.g. ff0000) or "transparent"',
-      )
-      .optional(),
+      .regex(HEX_OR_TRANSPARENT, 'must be a hex color (e.g. ff0000) or "transparent"')
+      .optional()
+      .meta({
+        description: 'Hex colour or `transparent`, for crop=pad or flattening transparency into format=jpeg/auto.',
+      }),
   });
 }
 
-function buildThumbnailSchema(maxDimension: number) {
-  return buildImageSchema(maxDimension).extend({
+export function thumbnailQuerySchema(maxDimension: number) {
+  return imageQuerySchema(maxDimension).extend({
+    format: format('Output format. `auto` picks AVIF, then WebP, then JPEG/PNG from the Accept header.').default(
+      'jpeg',
+    ),
     time: z.coerce
       .number({ message: 'must be a number of seconds' })
       .min(0, 'must be >= 0')
       .max(24 * 3600, 'must be at most 86400 seconds')
-      .default(0),
+      .default(0)
+      .meta({ description: 'Timestamp of the frame, in seconds. Decimals are allowed.' }),
   });
 }
+
+export const infoQuerySchema = z.object({ url: sourceUrl });
+
+const knownKeys = (schema: z.ZodObject) => [...Object.keys(schema.shape), ...AUTH_PARAMS];
 
 function distance(a: string, b: string): number {
   const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array<number>(b.length).fill(0)]);
@@ -157,7 +172,7 @@ function normalizeQuery(query: unknown, known: string[]): Record<string, string>
       details.push({ field: key, message: `Parameter "${key}" was provided more than once.` });
       continue;
     }
-    out[key] = String(value);
+    out[key] = CASE_INSENSITIVE.has(key) ? String(value).toLowerCase() : String(value);
   }
 
   if (details.length) throw new ApiError('INVALID_PARAMETER', undefined, details);
@@ -194,7 +209,7 @@ export function parseSourceUrl(value: string): URL {
   return url;
 }
 
-type ParsedImage = z.infer<ReturnType<typeof buildImageSchema>>;
+type ParsedImage = z.infer<ReturnType<typeof imageQuerySchema>>;
 
 function toTransform(data: ParsedImage, provided: Set<string>): ImageTransform {
   const fail = (field: string, message: string) => {
@@ -212,7 +227,13 @@ function toTransform(data: ParsedImage, provided: Set<string>): ImageTransform {
   if (provided.has('gravity') && data.gravity !== 'center' && data.crop !== 'fill') {
     fail('gravity', '"gravity" only applies to crop=fill.');
   }
-  if (provided.has('background') && data.crop !== 'pad' && data.format !== 'jpeg' && data.format !== 'auto') {
+  if (
+    provided.has('background') &&
+    data.crop !== 'pad' &&
+    data.format !== 'jpeg' &&
+    data.format !== 'jpg' &&
+    data.format !== 'auto'
+  ) {
     fail('background', '"background" only applies to crop=pad, or to format=jpeg/auto (to flatten transparency).');
   }
   if (provided.has('quality') && data.format === 'gif') {
@@ -222,7 +243,7 @@ function toTransform(data: ParsedImage, provided: Set<string>): ImageTransform {
   return {
     width: data.width,
     height: data.height,
-    format: data.format,
+    format: data.format === 'jpg' ? 'jpeg' : data.format,
     quality: data.quality,
     crop: data.crop,
     gravity: data.gravity,
@@ -231,27 +252,27 @@ function toTransform(data: ParsedImage, provided: Set<string>): ImageTransform {
 }
 
 export function parseProcessParams(query: unknown, maxDimension: number): ProcessParams {
-  const normalized = normalizeQuery(query, IMAGE_KEYS);
-  const result = buildImageSchema(maxDimension).safeParse(normalized);
+  const schema = imageQuerySchema(maxDimension);
+  const normalized = normalizeQuery(query, knownKeys(schema));
+  const result = schema.safeParse(normalized);
   if (!result.success) throw zodToApiError(result.error);
   const provided = new Set(Object.keys(normalized));
   return { url: parseSourceUrl(result.data.url), transform: toTransform(result.data, provided) };
 }
 
 export function parseThumbnailParams(query: unknown, maxDimension: number): ThumbnailParams {
-  const normalized = normalizeQuery(query, VIDEO_KEYS);
-  const result = buildThumbnailSchema(maxDimension).safeParse(normalized);
+  const schema = thumbnailQuerySchema(maxDimension);
+  const normalized = normalizeQuery(query, knownKeys(schema));
+  const result = schema.safeParse(normalized);
   if (!result.success) throw zodToApiError(result.error);
-  const { time, ...parsed } = result.data;
-  const image = { ...parsed, format: parsed.format ?? 'jpeg' };
+  const { time, ...image } = result.data;
   const provided = new Set(Object.keys(normalized));
   return { url: parseSourceUrl(image.url), transform: toTransform(image, provided), time };
 }
 
 export function parseInfoParams(query: unknown): URL {
-  const normalized = normalizeQuery(query, INFO_KEYS);
-  if (!normalized.url) {
-    throw new ApiError('INVALID_PARAMETER', undefined, [{ field: 'url', message: '"url" is required' }]);
-  }
-  return parseSourceUrl(normalized.url);
+  const normalized = normalizeQuery(query, knownKeys(infoQuerySchema));
+  const result = infoQuerySchema.safeParse(normalized);
+  if (!result.success) throw zodToApiError(result.error);
+  return parseSourceUrl(result.data.url);
 }
