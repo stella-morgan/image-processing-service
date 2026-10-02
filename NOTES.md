@@ -2,6 +2,8 @@
 
 The full reference and implementation notes. For setup and a first run, see the [README](README.md).
 
+**Visual overview:** [`docs/overview.html`](docs/overview.html) walks through the whole design with diagrams: the request lifecycle, SSRF and ffmpeg defences, caching, rate limiting and the generated spec. Open it in a browser; GitHub shows the file's source rather than the page.
+
 ## Contents
 
 - [Development commands](#development-commands)
@@ -326,6 +328,8 @@ scripts/
   generate-openapi.ts    Writes openapi.yaml (`npm run openapi`) or checks it is current (`--check`)
 openapi.yaml             Generated OpenAPI 3.1 spec; do not edit by hand
 docker-compose.yml       Two instances sharing rate limits through Redis
+docs/
+  overview.html          Visual overview of the design, with diagrams
 README.md                Setup, first run, tests
 NOTES.md                 This file
 ```

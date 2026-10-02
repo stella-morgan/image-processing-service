@@ -1,0 +1,835 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="How the Cloudinary-style image and video transformation API works, with diagrams.">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; }
+  img, svg { max-width: 100%; }
+</style>
+<title>Image Processing Service</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+  :root {
+    --ground: #f3f5f7;
+    --surface: #ffffff;
+    --ink: #141820;
+    --ink-2: #39414c;
+    --muted: #5b6574;
+    --rule: #d6dce3;
+    --rule-strong: #aeb8c4;
+    --accent: #0a7bb0;
+    --accent-soft: #e2f0f7;
+    --stop: #b5306a;
+    --stop-soft: #f8e5ee;
+    --ok: #2b8455;
+    --ok-soft: #e1f2e8;
+    --pad: #f2e6c6;
+    --code-bg: #eaeef2;
+    --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    --sans: "IBM Plex Sans", "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #0e1116;
+      --surface: #161a21;
+      --ink: #e6e9ee;
+      --ink-2: #c2c9d2;
+      --muted: #97a1ae;
+      --rule: #29303a;
+      --rule-strong: #4a5462;
+      --accent: #4bb8e8;
+      --accent-soft: #11303f;
+      --stop: #ef72a8;
+      --stop-soft: #3b1a29;
+      --ok: #5cc48c;
+      --ok-soft: #133524;
+      --pad: #3a3220;
+      --code-bg: #1c212a;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #0e1116;
+    --surface: #161a21;
+    --ink: #e6e9ee;
+    --ink-2: #c2c9d2;
+    --muted: #97a1ae;
+    --rule: #29303a;
+    --rule-strong: #4a5462;
+    --accent: #4bb8e8;
+    --accent-soft: #11303f;
+    --stop: #ef72a8;
+    --stop-soft: #3b1a29;
+    --ok: #5cc48c;
+    --ok-soft: #133524;
+    --pad: #3a3220;
+    --code-bg: #1c212a;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font: 16px/1.6 var(--sans);
+    padding-inline: 20px;
+    padding-block: 0 72px;
+  }
+  .page { max-width: 1000px; margin: 0 auto; }
+  .prose { max-width: 68ch; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+  code, pre, .mono { font-family: var(--mono); }
+  code { font-size: 0.88em; background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.15; margin: 0; }
+  p { margin: 0; }
+
+  header.top { padding-block: 56px 28px; display: grid; gap: 18px; }
+  .eyebrow {
+    font: 500 12px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+  }
+  h1 { font-size: clamp(2.2rem, 5vw, 3.4rem); font-weight: 700; letter-spacing: -0.02em; }
+  .lede { font-size: 1.13rem; color: var(--ink-2); max-width: 62ch; }
+  .request {
+    font: 13.5px/1.5 var(--mono); background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 6px; padding: 12px 14px; overflow-x: auto; white-space: nowrap; max-width: 100%;
+  }
+  .request .verb { color: var(--accent); font-weight: 500; }
+  .request .q { color: var(--muted); }
+
+  .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-block: 1px solid var(--rule); margin-top: 8px; }
+  .fact { padding: 14px 16px; display: grid; gap: 2px; }
+  .fact + .fact { border-left: 1px solid var(--rule); }
+  .fact-num { font: 600 1.45rem/1.2 var(--display); font-variant-numeric: tabular-nums; }
+  .fact span { font-size: 13px; color: var(--muted); }
+
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px 18px; padding-block: 14px; border-bottom: 1px solid var(--rule); font-size: 14px; }
+  nav.toc a { color: var(--ink-2); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); text-decoration: underline; }
+
+  section { padding-block: 44px 8px; display: grid; gap: 18px; }
+  h2 { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.01em; }
+  h3 { font-size: 1.12rem; font-weight: 600; font-family: var(--sans); margin-top: 6px; }
+  .kicker { font: 500 12px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+  ul.points { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; max-width: 70ch; }
+  ul.points li::marker { color: var(--muted); }
+
+  figure.crop { margin: 8px 0 4px; position: relative; padding: 18px 16px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; }
+  figure.crop::before, figure.crop::after {
+    content: ""; position: absolute; width: 14px; height: 14px; border-color: var(--rule-strong); border-style: solid; pointer-events: none;
+  }
+  figure.crop::before { top: -7px; left: -7px; border-width: 1px 0 0 1px; }
+  figure.crop::after { bottom: -7px; right: -7px; border-width: 0 1px 1px 0; }
+  .scroll { overflow-x: auto; }
+  figcaption { font-size: 14px; color: var(--muted); margin-top: 10px; max-width: 78ch; }
+  figcaption b { color: var(--ink-2); font-weight: 600; }
+
+  .dg { display: block; width: 100%; height: auto; min-width: 760px; }
+  .dg text { font-family: var(--sans); }
+  .dg .box { fill: var(--surface); stroke: var(--rule-strong); stroke-width: 1.2; }
+  .dg .box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.2; }
+  .dg .box-stop { fill: var(--stop-soft); stroke: var(--stop); stroke-width: 1.2; }
+  .dg .box-ok { fill: var(--ok-soft); stroke: var(--ok); stroke-width: 1.2; }
+  .dg .t { fill: var(--ink); font-size: 12.5px; font-weight: 600; }
+  .dg .s { fill: var(--muted); font-size: 11px; }
+  .dg .m { font-family: var(--mono); }
+  .dg .lbl { fill: var(--muted); font-size: 11px; }
+  .dg .lbl-accent { fill: var(--accent); font-size: 11px; font-weight: 500; }
+  .dg .lbl-stop { fill: var(--stop); font-size: 11.5px; font-weight: 600; }
+  .dg .lbl-ok { fill: var(--ok); font-size: 11.5px; font-weight: 600; }
+  .dg .pill-stop { fill: var(--stop); font-size: 11px; font-weight: 600; }
+  .dg .pill-accent { fill: var(--accent); font-size: 11px; font-weight: 600; }
+  .dg .pill-ok { fill: var(--ok); font-size: 11px; font-weight: 600; }
+  .dg .edge { stroke: var(--ink-2); stroke-width: 1.3; fill: none; }
+  .dg .edge-dash { stroke-dasharray: 4 3; }
+  .dg .edge-stop { stroke: var(--stop); }
+  .dg .edge-accent { stroke: var(--accent); }
+  .dg .edge-ok { stroke: var(--ok); }
+  .dg .edge-muted { stroke: var(--rule-strong); }
+  .dg .head { fill: var(--ink-2); }
+  .dg .head-stop { fill: var(--stop); }
+  .dg .head-accent { fill: var(--accent); }
+  .dg .head-ok { fill: var(--ok); }
+  .dg .head-muted { fill: var(--rule-strong); }
+  .dg .bracket { stroke: var(--rule-strong); stroke-width: 1; fill: none; }
+  .dg .sep { stroke: var(--rule); stroke-width: 1; }
+  .dg .axis { stroke: var(--ink-2); stroke-width: 1.2; }
+  .dg .band { fill: var(--accent-soft); }
+  .dg .band-2 { fill: var(--accent-soft); opacity: 0.55; }
+  .dg .dot-accent { fill: var(--accent); }
+  .dg .dot-stop { fill: var(--stop); }
+  .dg .frame { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 5 3; }
+  .dg .img { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.2; }
+  .dg .img-dot { fill: var(--accent); }
+  .dg .ghost { opacity: 0.32; }
+  .dg .padfill { fill: var(--pad); }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { font: 500 12px/1.4 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--ground); }
+  td.status { font: 500 13.5px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.code { font: 13px var(--mono); white-space: nowrap; }
+  .s4 { color: var(--stop); }
+  .s5 { color: var(--stop); }
+
+  pre.block {
+    margin: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 14px 16px;
+    font: 13px/1.6 var(--mono); overflow-x: auto; color: var(--ink-2);
+  }
+  pre.block .c { color: var(--muted); }
+  pre.block .k { color: var(--accent); }
+  pre.block .str { color: var(--ok); }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 28px; }
+  .tile { display: grid; gap: 4px; align-content: start; }
+  .tile h3 { margin: 0; }
+  .tile p { color: var(--ink-2); font-size: 15px; }
+
+  .decisions { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+  .decision { display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: 20px; padding-block: 14px; border-bottom: 1px solid var(--rule); }
+  .decision b { font-weight: 600; }
+  .decision p { color: var(--ink-2); font-size: 15px; }
+
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); }
+
+  @media (max-width: 720px) {
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fact:nth-child(3) { border-left: 0; }
+    .fact:nth-child(n + 3) { border-top: 1px solid var(--rule); }
+    .grid-2 { grid-template-columns: 1fr; }
+    .decision { grid-template-columns: 1fr; gap: 4px; }
+    header.top { padding-block: 36px 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <p class="eyebrow">Technical overview</p>
+    <h1>Image Processing Service</h1>
+    <p class="lede">A Cloudinary-style API that fetches an image or video by URL, then resizes, crops, converts or thumbnails it on the fly. TypeScript on Fastify, sharp and ffmpeg, with a typed SDK and a spec generated from the code.</p>
+    <div class="request"><span class="verb">GET</span> /process<span class="q">?url=</span>https://picsum.photos/id/237/1200/800.jpg<span class="q">&amp;width=</span>800<span class="q">&amp;height=</span>600<span class="q">&amp;format=</span>webp<span class="q">&amp;crop=</span>fill</div>
+    <div class="facts">
+      <div class="fact"><b class="fact-num">6</b><span>endpoints, incl. Swagger UI</span></div>
+      <div class="fact"><b class="fact-num">241</b><span>tests, no network needed</span></div>
+      <div class="fact"><b class="fact-num">97.2%</b><span>line coverage, enforced</span></div>
+      <div class="fact"><b class="fact-num">22 · 24 · 26</b><span>Node versions in CI</span></div>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    <a href="#lifecycle">Request lifecycle</a>
+    <a href="#api">API</a>
+    <a href="#fetching">Untrusted URLs</a>
+    <a href="#video">Video</a>
+    <a href="#load">Caching and load</a>
+    <a href="#limits">Rate limits</a>
+    <a href="#errors">Errors</a>
+    <a href="#spec">Docs that can't drift</a>
+    <a href="#sdk">SDK</a>
+    <a href="#quality">Tests and delivery</a>
+    <a href="#decisions">Trade-offs</a>
+  </nav>
+
+  <section id="lifecycle">
+    <p class="kicker">How it works</p>
+    <h2>The life of a request</h2>
+    <p class="prose">Every request to <code>/process</code>, <code>/video/thumbnail</code> or <code>/info</code> runs the same gauntlet. The order is the design: who you are, whether you're over your limit, whether the URL is signed and whether the parameters make sense are all decided before a single byte is fetched. Even an invalid request counts against the rate limit.</p>
+    <figure class="crop">
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 960 240" role="img" aria-label="Seven stages from client identification to fetch and process. The first four reject with 401, 429, 403 or 400 before anything is fetched; the cache can answer early; a full job queue returns 503; the last stage returns the image or a source error.">
+          <defs>
+            <marker id="l-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="l-s" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-stop" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="l-c" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-accent" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="l-o" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-ok" d="M0,0 L8,4 L0,8 z"/></marker>
+          </defs>
+          <path class="bracket" d="M17,36 V30 H541 V36"/>
+          <text class="lbl" x="279" y="22" text-anchor="middle">Cheap checks · nothing fetched yet</text>
+          <path class="bracket" d="M687,36 V30 H943 V36"/>
+          <text class="lbl" x="815" y="22" text-anchor="middle">Real work · bounded by job slots</text>
+
+          <rect class="box" x="17" y="48" width="122" height="58" rx="6"/>
+          <text class="t" x="78" y="72" text-anchor="middle">Identify client</text>
+          <text class="s" x="78" y="90" text-anchor="middle">API key or IP</text>
+          <rect class="box" x="151" y="48" width="122" height="58" rx="6"/>
+          <text class="t" x="212" y="72" text-anchor="middle">Rate limit</text>
+          <text class="s" x="212" y="90" text-anchor="middle">memory or Redis</text>
+          <rect class="box" x="285" y="48" width="122" height="58" rx="6"/>
+          <text class="t" x="346" y="72" text-anchor="middle">Signature</text>
+          <text class="s" x="346" y="90" text-anchor="middle">if SIGNING_SECRET</text>
+          <rect class="box" x="419" y="48" width="122" height="58" rx="6"/>
+          <text class="t" x="480" y="72" text-anchor="middle">Validate</text>
+          <text class="s" x="480" y="90" text-anchor="middle">zod schemas</text>
+          <rect class="box" x="553" y="48" width="122" height="58" rx="6"/>
+          <text class="t" x="614" y="72" text-anchor="middle">Cache</text>
+          <text class="s" x="614" y="90" text-anchor="middle">or join in-flight</text>
+          <rect class="box" x="687" y="48" width="122" height="58" rx="6"/>
+          <text class="t" x="748" y="72" text-anchor="middle">Job slot</text>
+          <text class="s" x="748" y="90" text-anchor="middle">limiter + queue</text>
+          <rect class="box" x="821" y="48" width="122" height="58" rx="6"/>
+          <text class="t" x="882" y="72" text-anchor="middle">Fetch + process</text>
+          <text class="s" x="882" y="90" text-anchor="middle">sharp · ffmpeg</text>
+
+          <line class="edge" x1="139" y1="77" x2="149" y2="77" marker-end="url(#l-a)"/>
+          <line class="edge" x1="273" y1="77" x2="283" y2="77" marker-end="url(#l-a)"/>
+          <line class="edge" x1="407" y1="77" x2="417" y2="77" marker-end="url(#l-a)"/>
+          <line class="edge" x1="541" y1="77" x2="551" y2="77" marker-end="url(#l-a)"/>
+          <line class="edge" x1="675" y1="77" x2="685" y2="77" marker-end="url(#l-a)"/>
+          <line class="edge" x1="809" y1="77" x2="819" y2="77" marker-end="url(#l-a)"/>
+
+          <line class="edge edge-stop edge-dash" x1="78" y1="106" x2="78" y2="166" marker-end="url(#l-s)"/>
+          <line class="edge edge-stop edge-dash" x1="212" y1="106" x2="212" y2="166" marker-end="url(#l-s)"/>
+          <line class="edge edge-stop edge-dash" x1="346" y1="106" x2="346" y2="166" marker-end="url(#l-s)"/>
+          <line class="edge edge-stop edge-dash" x1="480" y1="106" x2="480" y2="166" marker-end="url(#l-s)"/>
+          <line class="edge edge-accent edge-dash" x1="614" y1="106" x2="614" y2="166" marker-end="url(#l-c)"/>
+          <line class="edge edge-stop edge-dash" x1="748" y1="106" x2="748" y2="166" marker-end="url(#l-s)"/>
+          <line class="edge edge-ok" x1="882" y1="106" x2="882" y2="166" marker-end="url(#l-o)"/>
+
+          <rect class="box-stop" x="17" y="170" width="122" height="30" rx="15"/>
+          <text class="pill-stop" x="78" y="189" text-anchor="middle">401 bad key</text>
+          <rect class="box-stop" x="151" y="170" width="122" height="30" rx="15"/>
+          <text class="pill-stop" x="212" y="189" text-anchor="middle">429 + Retry-After</text>
+          <rect class="box-stop" x="285" y="170" width="122" height="30" rx="15"/>
+          <text class="pill-stop" x="346" y="189" text-anchor="middle">403 bad signature</text>
+          <rect class="box-stop" x="419" y="170" width="122" height="30" rx="15"/>
+          <text class="pill-stop" x="480" y="189" text-anchor="middle">400 + details</text>
+          <rect class="box-accent" x="553" y="170" width="122" height="30" rx="15"/>
+          <text class="pill-accent" x="614" y="189" text-anchor="middle">HIT · COALESCED</text>
+          <rect class="box-stop" x="687" y="170" width="122" height="30" rx="15"/>
+          <text class="pill-stop" x="748" y="189" text-anchor="middle">503 + Retry-After</text>
+          <rect class="box-ok" x="821" y="170" width="122" height="30" rx="15"/>
+          <text class="pill-ok" x="882" y="189" text-anchor="middle">200 image + ETag</text>
+          <text class="lbl" x="943" y="222" text-anchor="end">or a source error: 413 · 415 · 422 · 502 · 504</text>
+        </svg>
+      </div>
+      <figcaption><b>Seven stages, one exit each.</b> Magenta exits reject the request; the cyan exit answers it from the cache or from an identical request already being processed. A client always learns which rule stopped it, from the status code and a stable error code.</figcaption>
+    </figure>
+  </section>
+
+  <section id="api">
+    <p class="kicker">Interface</p>
+    <h2>API surface</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Endpoint</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="code">GET /process</td><td>Resize, crop and convert a remote image</td></tr>
+          <tr><td class="code">GET /video/thumbnail</td><td>Grab a frame at <code>time</code> seconds, then apply the same transforms (JPEG by default)</td></tr>
+          <tr><td class="code">GET /info</td><td>Format, dimensions, size and alpha of a remote image, without transforming it</td></tr>
+          <tr><td class="code">GET /docs</td><td>Swagger UI; the spec itself at <code>/docs/json</code> and <code>/docs/yaml</code></td></tr>
+          <tr><td class="code">GET /</td><td>Every endpoint and the parameters each one accepts, with ranges and defaults</td></tr>
+          <tr><td class="code">GET /health</td><td>Liveness, running and queued jobs, and whether rate limits are being enforced</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose">Parameters follow Cloudinary's names and short aliases: <code>width</code>/<code>w</code>, <code>height</code>/<code>h</code>, <code>format</code>/<code>f</code> (jpeg, png, webp, avif, gif, tiff, or <code>auto</code> to negotiate AVIF or WebP from the browser's <code>Accept</code> header), <code>quality</code>/<code>q</code>, <code>crop</code>/<code>c</code>, <code>gravity</code>/<code>g</code>, <code>background</code>/<code>b</code> and <code>time</code>/<code>t</code>. Validation is strict on purpose: an unknown parameter gets <em>Did you mean "width"?</em>, and an option that would silently do nothing, like <code>gravity=north</code> without <code>crop=fill</code>, is rejected rather than ignored.</p>
+    <figure class="crop">
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 960 205" role="img" aria-label="The five crop modes applied to the same 4:3 image with a circle, targeting a square box. scale stretches it, fit and limit keep the aspect ratio inside the box, fill crops the sides, pad fills the leftover space.">
+          <defs>
+            <clipPath id="c-fill"><rect x="617" y="24" width="110" height="110"/></clipPath>
+          </defs>
+          <rect class="img" x="41" y="24" width="110" height="110"/>
+          <ellipse class="img-dot" cx="96" cy="79" rx="25" ry="33"/>
+          <rect class="frame" x="41" y="24" width="110" height="110"/>
+          <text class="t m" x="96" y="160" text-anchor="middle">crop=scale</text>
+          <text class="s" x="96" y="178" text-anchor="middle">exactly W×H · the default</text>
+          <text class="s" x="96" y="194" text-anchor="middle">stretches if both are set</text>
+
+          <rect class="img" x="233" y="37.75" width="110" height="82.5"/>
+          <circle class="img-dot" cx="288" cy="79" r="24.75"/>
+          <rect class="frame" x="233" y="24" width="110" height="110"/>
+          <text class="t m" x="288" y="160" text-anchor="middle">crop=fit</text>
+          <text class="s" x="288" y="178" text-anchor="middle">fits inside W×H</text>
+          <text class="s" x="288" y="194" text-anchor="middle">may upscale</text>
+
+          <rect class="img" x="440" y="49" width="80" height="60"/>
+          <circle class="img-dot" cx="480" cy="79" r="18"/>
+          <rect class="frame" x="425" y="24" width="110" height="110"/>
+          <text class="t m" x="480" y="160" text-anchor="middle">crop=limit</text>
+          <text class="s" x="480" y="178" text-anchor="middle">fits inside W×H</text>
+          <text class="s" x="480" y="194" text-anchor="middle">never upscales</text>
+
+          <g class="ghost">
+            <rect class="img" x="598.67" y="24" width="146.67" height="110"/>
+          </g>
+          <g clip-path="url(#c-fill)">
+            <rect class="img" x="598.67" y="24" width="146.67" height="110"/>
+          </g>
+          <circle class="img-dot" cx="672" cy="79" r="33"/>
+          <rect class="frame" x="617" y="24" width="110" height="110"/>
+          <text class="t m" x="672" y="160" text-anchor="middle">crop=fill</text>
+          <text class="s" x="672" y="178" text-anchor="middle">exactly W×H</text>
+          <text class="s" x="672" y="194" text-anchor="middle">crops the overflow by gravity</text>
+
+          <rect class="padfill" x="809" y="24" width="110" height="110"/>
+          <rect class="img" x="809" y="37.75" width="110" height="82.5"/>
+          <circle class="img-dot" cx="864" cy="79" r="24.75"/>
+          <rect class="frame" x="809" y="24" width="110" height="110"/>
+          <text class="t m" x="864" y="160" text-anchor="middle">crop=pad</text>
+          <text class="s" x="864" y="178" text-anchor="middle">exactly W×H</text>
+          <text class="s" x="864" y="194" text-anchor="middle">fills the rest with background</text>
+        </svg>
+      </div>
+      <figcaption><b>One 4:3 source, one square target</b> (the dashed box), five modes, matching Cloudinary's semantics. The circle shows what happens to proportions: only <code>scale</code> distorts, and only when both dimensions are given. <code>fill</code> and <code>pad</code> require both.</figcaption>
+    </figure>
+  </section>
+
+  <section id="fetching">
+    <p class="kicker">Security</p>
+    <h2>Fetching URLs from strangers</h2>
+    <p class="prose">The service fetches whatever URL it's handed, which makes it an obvious way to reach internal systems (SSRF). Private, loopback, link-local, CGNAT, multicast, NAT64 and 6to4 ranges are all refused, and the important part is <em>when</em> that's checked.</p>
+    <figure class="crop">
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 960 262" role="img" aria-label="A url parameter passes three checks before reaching the source server: URL parsing, a host check for IP literals and the allow-list, and a DNS lookup at connect time that drops private addresses. Redirects loop back to the host check, at most five times.">
+          <defs>
+            <marker id="f-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="f-s" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-stop" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="f-c" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-accent" d="M0,0 L8,4 L0,8 z"/></marker>
+          </defs>
+          <path class="edge edge-accent" d="M892,70 V38 H480 V64" marker-end="url(#f-c)"/>
+          <text class="lbl-accent" x="686" y="30" text-anchor="middle">3xx redirect → back to step 2, at most 5 hops</text>
+
+          <rect class="box" x="16" y="70" width="100" height="56" rx="6"/>
+          <text class="t m" x="66" y="94" text-anchor="middle">?url=</text>
+          <text class="s" x="66" y="112" text-anchor="middle">from the client</text>
+          <rect class="box" x="140" y="70" width="210" height="56" rx="6"/>
+          <text class="t" x="245" y="94" text-anchor="middle">1 · Parse the URL</text>
+          <text class="s" x="245" y="112" text-anchor="middle">http(s) only, no user:pass</text>
+          <rect class="box" x="375" y="70" width="210" height="56" rx="6"/>
+          <text class="t" x="480" y="94" text-anchor="middle">2 · Check the host</text>
+          <text class="s" x="480" y="112" text-anchor="middle">IP literals · localhost · allow-list</text>
+          <rect class="box-accent" x="610" y="70" width="210" height="56" rx="6"/>
+          <text class="t" x="715" y="94" text-anchor="middle">3 · Connect</text>
+          <text class="s" x="715" y="112" text-anchor="middle">DNS lookup drops private IPs</text>
+          <rect class="box" x="845" y="70" width="95" height="56" rx="6"/>
+          <text class="t" x="892" y="94" text-anchor="middle">Source</text>
+          <text class="s" x="892" y="112" text-anchor="middle">server</text>
+
+          <line class="edge" x1="116" y1="98" x2="137" y2="98" marker-end="url(#f-a)"/>
+          <line class="edge" x1="350" y1="98" x2="372" y2="98" marker-end="url(#f-a)"/>
+          <line class="edge" x1="585" y1="98" x2="607" y2="98" marker-end="url(#f-a)"/>
+          <line class="edge" x1="820" y1="98" x2="842" y2="98" marker-end="url(#f-a)"/>
+
+          <line class="edge edge-stop edge-dash" x1="245" y1="126" x2="245" y2="190" marker-end="url(#f-s)"/>
+          <line class="edge edge-stop edge-dash" x1="480" y1="126" x2="480" y2="190" marker-end="url(#f-s)"/>
+          <line class="edge edge-stop edge-dash" x1="715" y1="126" x2="715" y2="190" marker-end="url(#f-s)"/>
+          <rect class="box-stop" x="160" y="194" width="170" height="30" rx="15"/>
+          <text class="pill-stop m" x="245" y="213" text-anchor="middle">400 INVALID_URL</text>
+          <rect class="box-stop" x="395" y="194" width="170" height="30" rx="15"/>
+          <text class="pill-stop m" x="480" y="213" text-anchor="middle">403 FORBIDDEN_URL</text>
+          <rect class="box-stop" x="630" y="194" width="170" height="30" rx="15"/>
+          <text class="pill-stop m" x="715" y="213" text-anchor="middle">403 FORBIDDEN_URL</text>
+          <text class="lbl m" x="245" y="246" text-anchor="middle">file:///etc/passwd</text>
+          <text class="lbl m" x="480" y="246" text-anchor="middle">[::ffff:127.0.0.1] · 2130706433</text>
+          <text class="lbl m" x="715" y="246" text-anchor="middle">evil.test → 10.0.0.7</text>
+        </svg>
+      </div>
+      <figcaption><b>Three checks at three moments.</b> The private-address check runs inside the DNS lookup used to open the socket, not in a separate lookup beforehand, so a hostname that resolves to an internal IP never gets a connection, even one whose DNS answer changes between lookups (DNS rebinding). IP literals skip DNS, so step 2 catches them, including disguised forms. Downloads are also capped by bytes (20 MB images, 100 MB videos) and by time (10 s), and an optional <code>ALLOWED_SOURCE_HOSTS</code> list narrows things further.</figcaption>
+    </figure>
+  </section>
+
+  <section id="video">
+    <p class="kicker">Security</p>
+    <h2>Video thumbnails without the ffmpeg trap</h2>
+    <p class="prose">ffmpeg normally guesses a file's format from its contents, and some formats tell it to open <em>other</em> files. A review of the first version showed that a "video" which is really an HLS playlist turned the thumbnail endpoint into a way to read files from the server. It was confirmed with a real exploit, fixed, and is now a regression test.</p>
+    <figure class="crop">
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 960 322" role="img" aria-label="Two paths for the same malicious playlist. Letting ffmpeg probe it makes ffmpeg open a local file or internal URL and leak it as a thumbnail. Checking magic bytes first rejects it with 415, while real videos go to ffmpeg with the container forced.">
+          <defs>
+            <marker id="v-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="v-s" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-stop" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="v-o" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-ok" d="M0,0 L8,4 L0,8 z"/></marker>
+          </defs>
+          <text class="lbl-stop" x="20" y="56">Before: letting ffmpeg guess</text>
+          <rect class="box" x="20" y="68" width="190" height="56" rx="6"/>
+          <text class="t m" x="115" y="92" text-anchor="middle">video.mp4</text>
+          <text class="s" x="115" y="110" text-anchor="middle">really an HLS playlist</text>
+          <rect class="box" x="250" y="68" width="200" height="56" rx="6"/>
+          <text class="t" x="350" y="92" text-anchor="middle">ffmpeg probes it</text>
+          <text class="s" x="350" y="110" text-anchor="middle">sees a playlist, follows it</text>
+          <rect class="box-stop" x="490" y="68" width="220" height="56" rx="6"/>
+          <text class="t m" x="600" y="92" text-anchor="middle">opens file:///etc/passwd</text>
+          <text class="s m" x="600" y="110" text-anchor="middle">or http://169.254.169.254</text>
+          <rect class="box-stop" x="750" y="68" width="190" height="56" rx="6"/>
+          <text class="t" x="845" y="92" text-anchor="middle">leaked as the thumbnail</text>
+          <text class="s" x="845" y="110" text-anchor="middle">file read · SSRF</text>
+          <line class="edge" x1="210" y1="96" x2="247" y2="96" marker-end="url(#v-a)"/>
+          <line class="edge edge-stop" x1="450" y1="96" x2="487" y2="96" marker-end="url(#v-s)"/>
+          <line class="edge edge-stop" x1="710" y1="96" x2="747" y2="96" marker-end="url(#v-s)"/>
+
+          <line class="sep" x1="20" y1="152" x2="940" y2="152"/>
+
+          <text class="lbl-ok" x="20" y="186">Now: checking magic bytes first</text>
+          <rect class="box" x="20" y="198" width="190" height="56" rx="6"/>
+          <text class="t" x="115" y="222" text-anchor="middle">downloaded bytes</text>
+          <text class="s" x="115" y="240" text-anchor="middle">same playlist, or a real video</text>
+          <rect class="box-accent" x="250" y="198" width="200" height="56" rx="6"/>
+          <text class="t m" x="350" y="222" text-anchor="middle">detectContainer()</text>
+          <text class="s m" x="350" y="240" text-anchor="middle">ftyp · EBML · RIFF · OggS …</text>
+          <rect class="box-ok" x="490" y="198" width="220" height="56" rx="6"/>
+          <text class="t m" x="600" y="222" text-anchor="middle">ffmpeg -f mov …</text>
+          <text class="s" x="600" y="240" text-anchor="middle">container forced · file protocol only</text>
+          <rect class="box-ok" x="750" y="198" width="190" height="56" rx="6"/>
+          <text class="t" x="845" y="222" text-anchor="middle">frame → sharp</text>
+          <text class="s" x="845" y="240" text-anchor="middle">a normal thumbnail</text>
+          <line class="edge" x1="210" y1="226" x2="247" y2="226" marker-end="url(#v-a)"/>
+          <line class="edge edge-ok" x1="450" y1="226" x2="487" y2="226" marker-end="url(#v-o)"/>
+          <text class="lbl" x="469" y="218" text-anchor="middle">match</text>
+          <line class="edge edge-ok" x1="710" y1="226" x2="747" y2="226" marker-end="url(#v-o)"/>
+          <line class="edge edge-stop edge-dash" x1="350" y1="254" x2="350" y2="280" marker-end="url(#v-s)"/>
+          <text class="lbl" x="358" y="272">no match</text>
+          <rect class="box-stop" x="265" y="284" width="170" height="28" rx="14"/>
+          <text class="pill-stop m" x="350" y="302" text-anchor="middle">415 not a video</text>
+        </svg>
+      </div>
+      <figcaption><b>The same malicious file, two outcomes.</b> The service identifies the container from its magic bytes and accepts only plain media containers (MP4/MOV, WebM/MKV, AVI, FLV, Ogg, MPEG-TS). ffmpeg then runs with that container forced and only the <code>file</code> protocol allowed, and is killed after 30 s. Videos are written to a temp file first, because many MP4s keep their index at the end; a <code>time</code> past the end returns a 400 that states the real duration.</figcaption>
+    </figure>
+  </section>
+
+  <section id="load">
+    <p class="kicker">Performance</p>
+    <h2>Caching and load</h2>
+    <figure class="crop">
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 960 240" role="img" aria-label="Five identical requests reach an in-flight map. The first starts a job, the other four wait on the same promise. One fetch and one encode run inside a job slot, the result goes into the LRU cache, and later requests are cache hits.">
+          <defs>
+            <marker id="k-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="k-c" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-accent" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="k-m" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-muted" d="M0,0 L8,4 L0,8 z"/></marker>
+          </defs>
+          <text class="lbl-accent" x="262" y="22" text-anchor="middle">1st starts the job</text>
+          <rect class="box-accent" x="20" y="18" width="180" height="34" rx="6"/>
+          <text class="t m" x="110" y="40" text-anchor="middle">request 1 · MISS</text>
+          <rect class="box" x="20" y="62" width="180" height="34" rx="6"/>
+          <text class="s m" x="110" y="84" text-anchor="middle">request 2 · COALESCED</text>
+          <rect class="box" x="20" y="106" width="180" height="34" rx="6"/>
+          <text class="s m" x="110" y="128" text-anchor="middle">request 3 · COALESCED</text>
+          <rect class="box" x="20" y="150" width="180" height="34" rx="6"/>
+          <text class="s m" x="110" y="172" text-anchor="middle">request 4 · COALESCED</text>
+          <rect class="box" x="20" y="194" width="180" height="34" rx="6"/>
+          <text class="s m" x="110" y="216" text-anchor="middle">request 5 · COALESCED</text>
+          <text class="lbl" x="262" y="236" text-anchor="middle">2nd–5th wait on it</text>
+
+          <line class="edge edge-accent" x1="200" y1="35" x2="326" y2="100" marker-end="url(#k-c)"/>
+          <line class="edge edge-muted edge-dash" x1="200" y1="79" x2="326" y2="112" marker-end="url(#k-m)"/>
+          <line class="edge edge-muted edge-dash" x1="200" y1="123" x2="326" y2="123" marker-end="url(#k-m)"/>
+          <line class="edge edge-muted edge-dash" x1="200" y1="167" x2="326" y2="134" marker-end="url(#k-m)"/>
+          <line class="edge edge-muted edge-dash" x1="200" y1="211" x2="326" y2="146" marker-end="url(#k-m)"/>
+
+          <rect class="box" x="330" y="88" width="200" height="70" rx="6"/>
+          <text class="t" x="430" y="117" text-anchor="middle">in-flight map</text>
+          <text class="s" x="430" y="136" text-anchor="middle">same key → same promise</text>
+          <line class="edge" x1="530" y1="123" x2="596" y2="123" marker-end="url(#k-a)"/>
+          <text class="lbl" x="563" y="114" text-anchor="middle">one job</text>
+          <rect class="box-accent" x="600" y="88" width="180" height="70" rx="6"/>
+          <text class="t" x="690" y="117" text-anchor="middle">1 fetch + 1 encode</text>
+          <text class="s" x="690" y="136" text-anchor="middle">inside a job slot</text>
+          <line class="edge" x1="780" y1="123" x2="826" y2="123" marker-end="url(#k-a)"/>
+          <text class="lbl" x="803" y="114" text-anchor="middle">stores</text>
+          <rect class="box" x="830" y="88" width="110" height="70" rx="6"/>
+          <text class="t" x="885" y="117" text-anchor="middle">LRU cache</text>
+          <text class="s" x="885" y="136" text-anchor="middle">500 · 100 MB · 1 h</text>
+          <text class="lbl m" x="885" y="182" text-anchor="middle">later → HIT</text>
+        </svg>
+      </div>
+      <figcaption><b>Five identical requests, one fetch.</b> The first starts the job; the rest wait on the same promise and say so in <code>X-Cache</code>. The tests assert exactly this: one hit on the fixture server, one MISS and four COALESCED.</figcaption>
+    </figure>
+    <div class="grid-2">
+      <div class="tile">
+        <h3>Bounded memory</h3>
+        <p>The result cache is limited by entry count, total bytes and age, so a few huge outputs can't push the process out of memory.</p>
+      </div>
+      <div class="tile">
+        <h3>Bounded work</h3>
+        <p>At most one fetch-and-transform job per CPU core, plus a queue of 100. Beyond that, a fast <code>503</code> with <code>Retry-After</code> replaces a slow collapse.</p>
+      </div>
+      <div class="tile">
+        <h3>CDN-friendly responses</h3>
+        <p>Strong ETags with <code>304 Not Modified</code> (lists and weak tags handled), <code>Cache-Control</code> on success, <code>no-store</code> on errors, and <code>Vary: Accept</code> when the format is negotiated.</p>
+      </div>
+      <div class="tile">
+        <h3>Decompression bombs</h3>
+        <p>Images over 100 megapixels are refused before decoding, whatever their file size.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="limits">
+    <p class="kicker">Access</p>
+    <h2>Rate limits and API keys</h2>
+    <p class="prose">Rate limiting is always on (60 requests per minute by default). What changes is who a request counts against.</p>
+    <figure class="crop">
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 960 220" role="img" aria-label="Deciding the bucket: a request with a known API key counts against that key's own limit from any IP; an unknown key is rejected with 401 and not counted; a request without a key counts against its IP address.">
+          <defs>
+            <marker id="r-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="r-s" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-stop" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="r-o" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-ok" d="M0,0 L8,4 L0,8 z"/></marker>
+          </defs>
+          <rect class="box" x="20" y="95" width="120" height="44" rx="6"/>
+          <text class="t" x="80" y="122" text-anchor="middle">request</text>
+          <line class="edge" x1="140" y1="117" x2="186" y2="117" marker-end="url(#r-a)"/>
+          <rect class="box-accent" x="190" y="95" width="170" height="44" rx="22"/>
+          <text class="t" x="275" y="122" text-anchor="middle">API key sent?</text>
+          <path class="edge" d="M275,95 V52 H416" marker-end="url(#r-a)"/>
+          <text class="lbl" x="283" y="76">yes</text>
+          <path class="edge" d="M275,139 V182 H646" marker-end="url(#r-o)"/>
+          <text class="lbl" x="283" y="164">no</text>
+
+          <rect class="box-accent" x="420" y="30" width="170" height="44" rx="22"/>
+          <text class="t" x="505" y="57" text-anchor="middle">key known?</text>
+          <line class="edge" x1="590" y1="52" x2="646" y2="52" marker-end="url(#r-o)"/>
+          <text class="lbl" x="618" y="45" text-anchor="middle">yes</text>
+          <path class="edge edge-stop edge-dash" d="M505,74 V117 H646" marker-end="url(#r-s)"/>
+          <text class="lbl" x="513" y="98">no</text>
+
+          <rect class="box-ok" x="650" y="30" width="290" height="44" rx="6"/>
+          <text class="t m" x="795" y="49" text-anchor="middle">bucket key:partner</text>
+          <text class="s" x="795" y="66" text-anchor="middle">the key's own limit, from any IP</text>
+          <rect class="box-stop" x="650" y="100" width="290" height="34" rx="17"/>
+          <text class="pill-stop m" x="795" y="121" text-anchor="middle">401 INVALID_API_KEY · not counted</text>
+          <rect class="box-ok" x="650" y="160" width="290" height="44" rx="6"/>
+          <text class="t m" x="795" y="179" text-anchor="middle">bucket ip:203.0.113.10</text>
+          <text class="s" x="795" y="196" text-anchor="middle">RATE_LIMIT_MAX · IPv6 grouped by /64</text>
+        </svg>
+      </div>
+      <figcaption><b>Two kinds of bucket.</b> Keys come from <code>API_KEYS=name:key[:limit]</code> and are sent as <code>X-API-Key</code> or, for <code>&lt;img&gt;</code> URLs, <code>?api_key=</code>. <code>REQUIRE_API_KEY=true</code> turns the no-key branch into a 401. Behind a load balancer, <code>TRUST_PROXY=true</code> makes the IP bucket use the real client address.</figcaption>
+    </figure>
+
+    <figure class="crop">
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 960 256" role="img" aria-label="Left: with in-memory counters, two instances each count 60 requests, so one client gets 120 per minute. Right: with REDIS_URL set, both instances increment one Redis key, so the 61st request gets 429 on either.">
+          <defs>
+            <marker id="m-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head" d="M0,0 L8,4 L0,8 z"/></marker>
+            <marker id="m-c" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head-accent" d="M0,0 L8,4 L0,8 z"/></marker>
+          </defs>
+          <text class="t" x="20" y="24">Counters in memory · the default</text>
+          <rect class="box" x="20" y="108" width="100" height="44" rx="6"/>
+          <text class="t" x="70" y="135" text-anchor="middle">client</text>
+          <path class="edge" d="M120,130 H160 V76 H206" marker-end="url(#m-a)"/>
+          <path class="edge" d="M120,130 H160 V184 H206" marker-end="url(#m-a)"/>
+          <text class="lbl m" x="183" y="68" text-anchor="middle">60 req</text>
+          <text class="lbl m" x="183" y="176" text-anchor="middle">60 req</text>
+          <rect class="box" x="210" y="46" width="230" height="60" rx="6"/>
+          <text class="t m" x="325" y="71" text-anchor="middle">instance :3001</text>
+          <text class="s" x="325" y="90" text-anchor="middle">own counter · 60 of 60, all allowed</text>
+          <rect class="box" x="210" y="154" width="230" height="60" rx="6"/>
+          <text class="t m" x="325" y="179" text-anchor="middle">instance :3002</text>
+          <text class="s" x="325" y="198" text-anchor="middle">own counter · 60 of 60, all allowed</text>
+          <text class="lbl-stop" x="20" y="244">One client gets 120 per minute</text>
+
+          <line class="sep" x1="478" y1="12" x2="478" y2="248"/>
+
+          <text class="t" x="500" y="24">REDIS_URL set</text>
+          <rect class="box" x="500" y="108" width="90" height="44" rx="6"/>
+          <text class="t" x="545" y="135" text-anchor="middle">client</text>
+          <path class="edge" d="M590,130 H615 V76 H636" marker-end="url(#m-a)"/>
+          <path class="edge" d="M590,130 H615 V184 H636" marker-end="url(#m-a)"/>
+          <rect class="box" x="640" y="46" width="150" height="60" rx="6"/>
+          <text class="t m" x="715" y="71" text-anchor="middle">instance :3001</text>
+          <text class="s" x="715" y="90" text-anchor="middle">no local count</text>
+          <rect class="box" x="640" y="154" width="150" height="60" rx="6"/>
+          <text class="t m" x="715" y="179" text-anchor="middle">instance :3002</text>
+          <text class="s" x="715" y="198" text-anchor="middle">no local count</text>
+          <path class="edge edge-accent" d="M790,76 H812 V120 H836" marker-end="url(#m-c)"/>
+          <path class="edge edge-accent" d="M790,184 H812 V140 H836" marker-end="url(#m-c)"/>
+          <rect class="box-accent" x="840" y="100" width="105" height="60" rx="6"/>
+          <text class="t" x="892" y="125" text-anchor="middle">Redis</text>
+          <text class="s m" x="892" y="143" text-anchor="middle">one key</text>
+          <text class="lbl m" x="892" y="180" text-anchor="middle">atomic INCR</text>
+          <text class="lbl-ok" x="500" y="244">One counter: the 61st request gets 429 on either</text>
+        </svg>
+      </div>
+      <figcaption><b>Same client, two deployments.</b> With <code>REDIS_URL</code> set, every instance increments the same key (<code>image-service:rate-limit:ip:…</code>) in a small Lua script that Redis runs atomically, so two instances can't both let the 61st request through. If Redis is unreachable the service fails open: requests are still served, one warning is logged, and <code>/health</code> reports <code>"connected": false</code>.</figcaption>
+    </figure>
+
+    <figure class="crop">
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 960 170" role="img" aria-label="A fixed window on a timeline: the first request at 12:00:00 starts a 60-second window, the 60th at 12:00:40 leaves 0 remaining, the 61st is rejected with Retry-After 19, and the key expires at 12:01:00 so the next request starts a new window.">
+          <rect class="band" x="80" y="88" width="400" height="12"/>
+          <rect class="band-2" x="486.7" y="88" width="393.3" height="12"/>
+          <line class="axis" x1="70" y1="100" x2="900" y2="100"/>
+          <text class="lbl" x="280" y="80" text-anchor="middle">window 1 · 60 s</text>
+          <text class="lbl" x="683" y="80" text-anchor="middle">window 2</text>
+
+          <line class="axis" x1="80" y1="100" x2="80" y2="106"/>
+          <line class="axis" x1="346.7" y1="100" x2="346.7" y2="106"/>
+          <line class="axis" x1="880" y1="100" x2="880" y2="106"/>
+          <text class="lbl m" x="80" y="122" text-anchor="middle">12:00:00</text>
+          <text class="lbl m" x="346.7" y="122" text-anchor="middle">12:00:40</text>
+          <text class="lbl m" x="880" y="122" text-anchor="middle">12:02:00</text>
+
+          <line class="edge edge-muted edge-dash" x1="480" y1="50" x2="480" y2="108"/>
+          <text class="lbl" x="480" y="42" text-anchor="middle">12:01:00 · key expires</text>
+
+          <circle class="dot-accent" cx="80" cy="100" r="5"/>
+          <line class="edge edge-muted" x1="80" y1="94" x2="80" y2="66"/>
+          <text class="lbl-accent" x="86" y="62">1st request starts the window</text>
+          <circle class="dot-accent" cx="346.7" cy="100" r="5"/>
+          <line class="edge edge-muted" x1="346.7" y1="94" x2="346.7" y2="46"/>
+          <text class="lbl-accent" x="346.7" y="40" text-anchor="middle">60th · remaining 0</text>
+          <circle class="dot-stop" cx="353.3" cy="100" r="5"/>
+          <text class="lbl-stop m" x="353.3" y="150" text-anchor="middle">61st → 429 · Retry-After: 19</text>
+          <circle class="dot-accent" cx="486.7" cy="100" r="5"/>
+          <text class="lbl-accent" x="560" y="150">next request starts a fresh window</text>
+        </svg>
+      </div>
+      <figcaption><b>A fixed window.</b> It starts at a client's first request and simply expires; rejected requests don't extend it. A client can burst up to twice its limit across a window boundary. That's acceptable here because the job limiter, not the rate limiter, caps the real processing load.</figcaption>
+    </figure>
+    <p class="prose">Optional signed URLs (<code>SIGNING_SECRET</code>) add an HMAC-SHA256 over the path and sorted parameters, checked in constant time and <em>after</em> the rate limit, so guessing signatures is rate limited too. <code>api_key</code> and <code>signature</code> are redacted from logs, and keys are looked up by SHA-256 digest so lookup timing reveals nothing about valid keys.</p>
+  </section>
+
+  <section id="errors">
+    <p class="kicker">Contract</p>
+    <h2>Errors clients can branch on</h2>
+    <p class="prose">Every error has the same shape, <code>{ "error": { "code", "message", "details"? } }</code>, with a stable <code>code</code> and, for bad parameters, the field that caused it. Unexpected failures become a generic 500 logged with the request id; internals never reach the client.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Status</th><th>Code</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td class="status s4">400</td><td class="code">INVALID_PARAMETER</td><td>Missing, malformed, out-of-range, unknown, duplicated or ineffective parameters; <code>time</code> past the end of the video</td></tr>
+          <tr><td class="status s4">400</td><td class="code">INVALID_URL</td><td>Not an absolute http(s) URL, or it contains credentials</td></tr>
+          <tr><td class="status s4">401</td><td class="code">INVALID_API_KEY</td><td>Unknown key, or no key while <code>REQUIRE_API_KEY</code> is on</td></tr>
+          <tr><td class="status s4">403</td><td class="code">INVALID_SIGNATURE</td><td>Signing is on and the signature is missing or doesn't match</td></tr>
+          <tr><td class="status s4">403</td><td class="code">FORBIDDEN_URL</td><td>Private or internal address, or a host outside the allow-list</td></tr>
+          <tr><td class="status s4">404</td><td class="code">SOURCE_NOT_FOUND</td><td>The source returned 404 or 410 (<code>NOT_FOUND</code> for unknown routes)</td></tr>
+          <tr><td class="status s4">413</td><td class="code">SOURCE_TOO_LARGE</td><td>Over the byte limit, or over 100 megapixels</td></tr>
+          <tr><td class="status s4">415</td><td class="code">UNSUPPORTED_MEDIA_TYPE</td><td>Not an image, or not a supported video container</td></tr>
+          <tr><td class="status s4">422</td><td class="code">UNPROCESSABLE_SOURCE</td><td>Corrupt, empty or undecodable source</td></tr>
+          <tr><td class="status s4">429</td><td class="code">RATE_LIMITED</td><td>This client used up its window; retry after <code>Retry-After</code></td></tr>
+          <tr><td class="status s5">502</td><td class="code">SOURCE_FETCH_FAILED</td><td>Source returned 5xx, DNS failed, connection refused, too many redirects</td></tr>
+          <tr><td class="status s5">503</td><td class="code">SERVER_BUSY</td><td>All job slots and the queue are full; retry after <code>Retry-After</code></td></tr>
+          <tr><td class="status s5">504</td><td class="code">SOURCE_TIMEOUT</td><td>The source took longer than the fetch budget</td></tr>
+          <tr><td class="status s5">500</td><td class="code">INTERNAL_ERROR</td><td>Anything unexpected; logged with the request id</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="spec">
+    <p class="kicker">Developer experience</p>
+    <h2>Docs that can't drift</h2>
+    <p class="prose">The OpenAPI 3.1 spec isn't written by hand. It's generated from the same zod schemas that validate requests, and served from the running configuration, so <code>MAX_DIMENSION=2000</code> shows up in the docs as a maximum width of 2000. When the spec was first generated, it showed the old hand-written one had already drifted in three places.</p>
+    <figure class="crop">
+      <div class="scroll">
+        <svg class="dg" viewBox="0 0 960 322" role="img" aria-label="The zod schemas feed five consumers: request validation, the live docs, the committed openapi.yaml, the route return types and the SDK types. Each connection is guarded by the schema itself, Redocly, a freshness test, the TypeScript build or a type-level test.">
+          <defs>
+            <marker id="g-a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="head" d="M0,0 L8,4 L0,8 z"/></marker>
+          </defs>
+          <rect class="box-accent" x="20" y="105" width="260" height="120" rx="6"/>
+          <text class="t" x="40" y="136">zod schemas</text>
+          <text class="s m" x="40" y="162">params.ts · query parameters</text>
+          <text class="s m" x="40" y="182">responses.ts · /info, /health</text>
+          <text class="s m" x="40" y="202">errors.ts · error envelope</text>
+
+          <path class="edge" d="M280,165 H400 V37 H636" marker-end="url(#g-a)"/>
+          <path class="edge" d="M400,99 H636" marker-end="url(#g-a)"/>
+          <path class="edge" d="M400,161 H636" marker-end="url(#g-a)"/>
+          <path class="edge" d="M400,223 H636" marker-end="url(#g-a)"/>
+          <path class="edge" d="M400,165 V285 H636" marker-end="url(#g-a)"/>
+
+          <text class="lbl-accent" x="518" y="30" text-anchor="middle">the same schema objects</text>
+          <text class="lbl-accent" x="518" y="92" text-anchor="middle">z.toJSONSchema() · Redocly in CI</text>
+          <text class="lbl-accent" x="518" y="154" text-anchor="middle">test + openapi:check fail if stale</text>
+          <text class="lbl-accent" x="518" y="216" text-anchor="middle">TypeScript build</text>
+          <text class="lbl-accent" x="518" y="278" text-anchor="middle">type-level test</text>
+
+          <rect class="box" x="640" y="14" width="300" height="46" rx="6"/>
+          <text class="t" x="656" y="33">request validation</text>
+          <text class="s" x="656" y="50">parsing, defaults, error messages</text>
+          <rect class="box" x="640" y="76" width="300" height="46" rx="6"/>
+          <text class="t m" x="656" y="95">/docs · /docs/json</text>
+          <text class="s" x="656" y="112">built from the running config</text>
+          <rect class="box" x="640" y="138" width="300" height="46" rx="6"/>
+          <text class="t m" x="656" y="157">openapi.yaml</text>
+          <text class="s" x="656" y="174">committed, for client generators</text>
+          <rect class="box" x="640" y="200" width="300" height="46" rx="6"/>
+          <text class="t" x="656" y="219">route return types</text>
+          <text class="s" x="656" y="236">the /info and /health handlers</text>
+          <rect class="box" x="640" y="262" width="300" height="46" rx="6"/>
+          <text class="t" x="656" y="281">SDK types</text>
+          <text class="s" x="656" y="298">ImageInfo, option names, allowed values</text>
+        </svg>
+      </div>
+      <figcaption><b>One set of schemas, five consumers, a guard on every edge.</b> Add a parameter without regenerating the spec, return an undocumented field, or let the SDK's types fall behind, and the tests or the build fail. Each guard was proven by breaking the code on purpose. Only status codes, headers and security schemes are declared by hand, beside the generator.</figcaption>
+    </figure>
+    <p class="prose">Swagger UI at <code>/docs</code> lets you try every endpoint in the browser with images rendered inline, an <strong>Authorize</strong> button for API keys, and a server URL that follows whichever host is serving it.</p>
+  </section>
+
+  <section id="sdk">
+    <p class="kicker">Developer experience</p>
+    <h2>TypeScript SDK</h2>
+    <p class="prose">A dependency-free client that works anywhere <code>fetch</code> exists: browsers, Node, Deno and Bun. Its option types are checked against the server's schemas, so editors autocomplete exactly what the server accepts.</p>
+<pre class="block"><span class="k">import</span> { createClient, ImageServiceError } <span class="k">from</span> <span class="str">'image-processing-service/sdk'</span>;
+
+<span class="k">const</span> images = createClient({ baseUrl, apiKey, retry: { attempts: <span class="str">2</span> } });
+
+<span class="c">// URLs for &lt;img&gt; tags; no request is made</span>
+images.url(<span class="str">'https://cdn.example.com/cat.jpg'</span>, { width: <span class="str">500</span>, height: <span class="str">300</span>, crop: <span class="str">'fill'</span>, format: <span class="str">'webp'</span> });
+
+<span class="c">// Or fetch the bytes, with dimensions read from response headers</span>
+<span class="k">try</span> {
+  <span class="k">const</span> { data, width, height } = <span class="k">await</span> images.fetch(<span class="str">'https://cdn.example.com/cat.jpg'</span>, { width: <span class="str">200</span> });
+} <span class="k">catch</span> (err) {
+  <span class="k">if</span> (err <span class="k">instanceof</span> ImageServiceError &amp;&amp; err.code === <span class="str">'SOURCE_NOT_FOUND'</span>) showPlaceholder();
+}</pre>
+    <ul class="points">
+      <li>Keys go in the <code>X-API-Key</code> header for fetches, and in the URL only for <code>&lt;img&gt;</code> tags, which can't send headers.</li>
+      <li>Retries honour <code>Retry-After</code> on 429 and 503 and never retry validation errors; <code>ImageServiceError</code> carries <code>code</code>, <code>details</code> and <code>retryAfter</code>.</li>
+      <li>A separate Node-only entry point, <code>/sdk/signer</code>, signs URLs on the server so the secret never reaches a browser bundle.</li>
+    </ul>
+  </section>
+
+  <section id="quality">
+    <p class="kicker">Confidence</p>
+    <h2>Tests and delivery</h2>
+    <div class="grid-2">
+      <div class="tile">
+        <h3>Real outputs, no network</h3>
+        <p>A local fixture server generates real images and videos at startup and serves every failure mode: 404, 500, HTML, corrupt and empty bodies, oversize files, a server that never answers, redirect loops and disguised playlists. Tests decode the output to check format, dimensions and pixel colours.</p>
+      </div>
+      <div class="tile">
+        <h3>241 tests, 97.2% of lines</h3>
+        <p>240 run offline in seconds; one checks shared limits against a real Redis. Coverage thresholds fail CI if coverage drops, and knip reports no unused code.</p>
+      </div>
+      <div class="tile">
+        <h3>CI on three Node versions</h3>
+        <p>On Node 22, 24 and 26: Biome lint, strict typecheck, spec freshness and Redocly validation, tests with coverage against a Redis service, then a Docker build and a <code>/health</code> smoke test.</p>
+      </div>
+      <div class="tile">
+        <h3>Ready to run</h3>
+        <p>A multi-stage Node 24 image running as a non-root user with a health check, a compose file with two instances sharing Redis, and every setting an environment variable validated at startup.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <p class="kicker">Judgement calls</p>
+    <h2>Decisions and trade-offs</h2>
+    <div class="decisions">
+      <div class="decision"><b>Cloudinary defaults</b><p><code>crop=scale</code> and keeping the source format by default, so people who know Cloudinary aren't surprised.</p></div>
+      <div class="decision"><b>Strict over lenient</b><p>A typo like <code>widht=500</code> fails loudly instead of quietly returning the full-size image, which is the kind of bug that's hard to trace. Explicit default values are always accepted, because generated clients send them.</p></div>
+      <div class="decision"><b>Fail open on Redis</b><p>Availability wins over strict limits during a Redis outage, and the state is visible on <code>/health</code> for alerting.</p></div>
+      <div class="decision"><b>Fixed windows</b><p>Simple and one round trip per request. The burst at a window boundary is absorbed by the job limiter.</p></div>
+      <div class="decision"><b>Per-instance cache</b><p>Good for one instance and stated as such. At scale, a CDN sits in front and the LRU gives way to a shared store behind the same interface.</p></div>
+      <div class="decision"><b>Biome, not ESLint</b><p><code>typescript-eslint</code> doesn't support TypeScript 7 yet; Biome lints and formats without depending on the compiler's API.</p></div>
+    </div>
+    <p class="prose">Next steps, if the service grows: path-style Cloudinary URLs (<code>/image/w_500,c_fill/…</code>), more transforms such as <code>dpr</code>, blur and watermarks, worker threads with a shared cache, Prometheus metrics, and a frontend playground for building URLs with a live preview.</p>
+  </section>
+
+  <footer>
+    Built with Fastify, sharp, ffmpeg, zod and undici · Node.js 22.19+ · Setup is in <code>README.md</code>; the full reference is in <code>NOTES.md</code>.
+  </footer>
+</div>
+</body>
+</html>

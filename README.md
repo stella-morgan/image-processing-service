@@ -4,7 +4,9 @@ A Cloudinary-style image transformation API, written in TypeScript. Give it the 
 
 Built with [Fastify](https://fastify.dev), [sharp](https://sharp.pixelplumbing.com) and [ffmpeg](https://ffmpeg.org) (bundled, so there's nothing extra to install).
 
-**More detail:** [NOTES.md](NOTES.md) has the full API reference, configuration, security and implementation notes.
+**More detail:**
+- [NOTES.md](NOTES.md): full API reference, configuration, security and implementation notes.
+- [docs/overview.html](docs/overview.html): a visual overview of the design with diagrams. Open it in a browser.
 
 ## Requirements
 
