@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { type Config, loadConfig } from './config.js';
+import { registerDocs } from './docs.js';
 import { ApiError } from './lib/errors.js';
 import { CROP_MODES, GRAVITIES, OUTPUT_FORMATS } from './lib/params.js';
 import { verifySignature } from './lib/signing.js';
@@ -81,6 +82,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
       'GET /video/thumbnail': 'Extract a frame from a remote video as an image.',
       'GET /info': 'Return metadata (format, dimensions, size) for a remote image.',
       'GET /health': 'Liveness check.',
+      'GET /docs': 'Interactive API documentation (Swagger UI). The raw spec is at /docs/json and /docs/yaml.',
     },
     parameters: {
       url: 'Absolute http(s) URL of the source asset (required).',
@@ -105,6 +107,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
     jobs: services.limiter.stats,
   }));
 
+  await registerDocs(app);
   await app.register(processRoutes, { services });
   await app.register(videoRoutes, { services });
 

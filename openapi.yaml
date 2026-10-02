@@ -1,0 +1,239 @@
+openapi: 3.1.0
+info:
+  title: Image Processing Service
+  version: 0.1.0
+  license:
+    name: MIT
+    identifier: MIT
+  description: Cloudinary-style on-the-fly image transformation and video thumbnail API.
+servers:
+  - url: http://localhost:3000
+
+security:
+  - {}
+  - urlSignature: []
+
+paths:
+  /process:
+    get:
+      summary: Resize, crop and convert a remote image
+      operationId: processImage
+      parameters:
+        - $ref: '#/components/parameters/url'
+        - $ref: '#/components/parameters/width'
+        - $ref: '#/components/parameters/height'
+        - $ref: '#/components/parameters/format'
+        - $ref: '#/components/parameters/quality'
+        - $ref: '#/components/parameters/crop'
+        - $ref: '#/components/parameters/gravity'
+        - $ref: '#/components/parameters/background'
+      responses:
+        '200': { $ref: '#/components/responses/Image' }
+        '304': { description: Not modified (If-None-Match matched the ETag). }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Busy' }
+        '504': { $ref: '#/components/responses/Error' }
+
+  /video/thumbnail:
+    get:
+      summary: Extract a frame from a remote video
+      description: Accepts every /process parameter plus `time`. Output defaults to JPEG.
+      operationId: videoThumbnail
+      parameters:
+        - $ref: '#/components/parameters/url'
+        - name: time
+          in: query
+          description: Timestamp in seconds. Alias `t`.
+          schema: { type: number, minimum: 0, maximum: 86400, default: 0 }
+        - $ref: '#/components/parameters/width'
+        - $ref: '#/components/parameters/height'
+        - $ref: '#/components/parameters/format'
+        - $ref: '#/components/parameters/quality'
+        - $ref: '#/components/parameters/crop'
+        - $ref: '#/components/parameters/gravity'
+        - $ref: '#/components/parameters/background'
+      responses:
+        '200': { $ref: '#/components/responses/Image' }
+        '304': { description: Not modified. }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Busy' }
+
+  /info:
+    get:
+      summary: Metadata for a remote image
+      operationId: imageInfo
+      parameters:
+        - $ref: '#/components/parameters/url'
+      responses:
+        '200':
+          description: Image metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImageInfo' }
+        '400': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+
+  /health:
+    get:
+      summary: Liveness probe
+      operationId: health
+      security: []
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: ok }
+                  uptimeSeconds: { type: integer }
+                  jobs:
+                    type: object
+                    properties:
+                      active: { type: integer }
+                      queued: { type: integer }
+
+components:
+  securitySchemes:
+    urlSignature:
+      type: apiKey
+      in: query
+      name: signature
+      description: Required only when the server has SIGNING_SECRET set. base64url HMAC-SHA256 of the canonical request (see README).
+
+  parameters:
+    url:
+      name: url
+      in: query
+      required: true
+      description: Absolute http(s) URL of the source asset.
+      schema: { type: string, format: uri }
+    width:
+      name: width
+      in: query
+      description: Target width in pixels. Alias `w`.
+      schema: { type: integer, minimum: 1, maximum: 5000 }
+    height:
+      name: height
+      in: query
+      description: Target height in pixels. Alias `h`.
+      schema: { type: integer, minimum: 1, maximum: 5000 }
+    format:
+      name: format
+      in: query
+      description: Output format. `auto` negotiates AVIF/WebP from the Accept header. Alias `f`.
+      schema: { type: string, enum: [jpeg, jpg, png, webp, avif, gif, tiff, auto] }
+    quality:
+      name: quality
+      in: query
+      description: Lossy quality. Not supported for gif. Alias `q`.
+      schema: { type: integer, minimum: 1, maximum: 100 }
+    crop:
+      name: crop
+      in: query
+      description: Resize mode (Cloudinary semantics). fill and pad require both width and height. Alias `c`.
+      schema: { type: string, enum: [scale, fit, limit, fill, pad], default: scale }
+    gravity:
+      name: gravity
+      in: query
+      description: Anchor for crop=fill only. Alias `g`.
+      schema:
+        type: string
+        enum: [center, north, south, east, west, northeast, northwest, southeast, southwest, auto]
+        default: center
+    background:
+      name: background
+      in: query
+      description: Hex colour or `transparent`. Only for crop=pad or format=jpeg/auto. Alias `b`.
+      schema: { type: string, pattern: '^(transparent|#?([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8}))$' }
+
+  headers:
+    ETag: { schema: { type: string } }
+    X-Cache: { schema: { type: string, enum: [HIT, MISS, COALESCED] } }
+    X-Image-Width: { schema: { type: integer } }
+    X-Image-Height: { schema: { type: integer } }
+    X-Request-Id: { schema: { type: string } }
+
+  responses:
+    Image:
+      description: The processed image
+      headers:
+        ETag: { $ref: '#/components/headers/ETag' }
+        X-Cache: { $ref: '#/components/headers/X-Cache' }
+        X-Image-Width: { $ref: '#/components/headers/X-Image-Width' }
+        X-Image-Height: { $ref: '#/components/headers/X-Image-Height' }
+        X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+      content:
+        image/jpeg: { schema: { type: string, format: binary } }
+        image/png: { schema: { type: string, format: binary } }
+        image/webp: { schema: { type: string, format: binary } }
+        image/avif: { schema: { type: string, format: binary } }
+        image/gif: { schema: { type: string, format: binary } }
+        image/tiff: { schema: { type: string, format: binary } }
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Busy:
+      description: Server at capacity
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - INVALID_PARAMETER
+                - INVALID_URL
+                - INVALID_SIGNATURE
+                - FORBIDDEN_URL
+                - NOT_FOUND
+                - SOURCE_NOT_FOUND
+                - SOURCE_TOO_LARGE
+                - UNSUPPORTED_MEDIA_TYPE
+                - UNPROCESSABLE_SOURCE
+                - SOURCE_FETCH_FAILED
+                - SOURCE_TIMEOUT
+                - INTERNAL_ERROR
+                - SERVER_BUSY
+            message: { type: string }
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string }
+                  message: { type: string }
+    ImageInfo:
+      type: object
+      properties:
+        url: { type: string }
+        format: { type: string }
+        width: { type: integer }
+        height: { type: integer }
+        bytes: { type: integer }
+        hasAlpha: { type: boolean }
+        pages: { type: integer }
+        orientation: { type: [integer, 'null'] }
