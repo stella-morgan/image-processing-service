@@ -1,5 +1,6 @@
 import os from 'node:os';
 import { z } from 'zod';
+import { type ApiKeyEntry, parseApiKeys } from './lib/apiKeys.js';
 
 const bool = z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' || v === '1');
 
@@ -38,6 +39,25 @@ const EnvSchema = z.object({
   SIGNING_SECRET: z.string().min(16, 'must be at least 16 characters').optional(),
   ALLOWED_SOURCE_HOSTS: list.default([]),
   ALLOW_PRIVATE_NETWORKS: bool.default(false),
+  RATE_LIMIT_MAX: z.coerce.number().int().nonnegative().default(60),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  API_KEYS: z
+    .string()
+    .transform((v, ctx) => {
+      try {
+        return parseApiKeys(v);
+      } catch (err) {
+        ctx.addIssue({ code: 'custom', message: (err as Error).message });
+        return z.NEVER;
+      }
+    })
+    .default([]),
+  REQUIRE_API_KEY: bool.default(false),
+  TRUST_PROXY: bool.default(false),
+  REDIS_URL: z
+    .string()
+    .refine((v) => /^rediss?:\/\//.test(v), 'must start with redis:// or rediss://')
+    .optional(),
 });
 
 export interface Config {
@@ -56,6 +76,12 @@ export interface Config {
   signingSecret?: string;
   allowedSourceHosts: string[];
   allowPrivateNetworks: boolean;
+  rateLimitMax: number;
+  rateLimitWindowMs: number;
+  apiKeys: ApiKeyEntry[];
+  requireApiKey: boolean;
+  trustProxy: boolean;
+  redisUrl?: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -66,6 +92,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     throw new Error(`Invalid configuration: ${issues}`);
   }
   const e = parsed.data;
+  if (e.REQUIRE_API_KEY && e.API_KEYS.length === 0) {
+    throw new Error('Invalid configuration: REQUIRE_API_KEY: requires at least one entry in API_KEYS');
+  }
   return {
     port: e.PORT,
     host: e.HOST,
@@ -82,5 +111,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     signingSecret: e.SIGNING_SECRET,
     allowedSourceHosts: e.ALLOWED_SOURCE_HOSTS,
     allowPrivateNetworks: e.ALLOW_PRIVATE_NETWORKS,
+    rateLimitMax: e.RATE_LIMIT_MAX,
+    rateLimitWindowMs: e.RATE_LIMIT_WINDOW_MS,
+    apiKeys: e.API_KEYS,
+    requireApiKey: e.REQUIRE_API_KEY,
+    trustProxy: e.TRUST_PROXY,
+    redisUrl: e.REDIS_URL,
   };
 }

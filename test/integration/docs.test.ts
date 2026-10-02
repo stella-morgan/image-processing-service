@@ -35,6 +35,7 @@ describe('API docs', () => {
     const spec = res.json();
     expect(spec.openapi).toBe('3.1.0');
     expect(Object.keys(spec.paths)).toEqual(['/process', '/video/thumbnail', '/info', '/health']);
+    expect(Object.keys(spec.components.securitySchemes)).toEqual(['apiKeyHeader', 'apiKeyQuery', 'urlSignature']);
     expect(spec.servers).toEqual([{ url: 'http://images.example.com' }]);
   });
 
@@ -56,9 +57,12 @@ describe('API docs', () => {
     };
 
     for (const path of ['/process', '/video/thumbnail', '/info']) {
-      const names = (spec.paths[path].get.parameters as Parameter[]).map(
-        (p) => p.name ?? spec.components.parameters[p.$ref!.split('/').pop()!].name,
-      );
+      const queryAuth = Object.values(spec.components.securitySchemes as Record<string, { in: string; name: string }>)
+        .filter((scheme) => scheme.in === 'query')
+        .map((scheme) => scheme.name);
+      const names = (spec.paths[path].get.parameters as Parameter[])
+        .map((p) => p.name ?? spec.components.parameters[p.$ref!.split('/').pop()!].name)
+        .concat(queryAuth);
       for (const name of names.filter((n) => n !== 'url')) {
         const query = new URLSearchParams({ url: 'http://unresolvable.invalid/a', [name]: samples[name] ?? '1' });
         const res = await get(`${path}?${query}`);

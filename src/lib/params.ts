@@ -51,7 +51,7 @@ const ALIASES: Record<string, string> = {
   t: 'time',
 };
 
-const INFO_KEYS = ['url', 'signature'];
+const INFO_KEYS = ['url', 'signature', 'api_key'];
 const IMAGE_KEYS = [...INFO_KEYS, 'width', 'height', 'format', 'quality', 'crop', 'gravity', 'background'];
 const VIDEO_KEYS = [...IMAGE_KEYS, 'time'];
 

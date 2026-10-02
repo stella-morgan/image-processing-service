@@ -37,10 +37,17 @@ export interface ImageInfo {
   orientation: number | null;
 }
 
+export interface RetryOptions {
+  attempts: number;
+  maxDelayMs?: number;
+}
+
 export interface ClientOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signer?: Signer;
+  apiKey?: string;
+  retry?: RetryOptions;
 }
 
 export type Signer = (path: string, params: Record<string, string>) => string;
@@ -55,6 +62,7 @@ export class ImageServiceError extends Error {
     readonly code: string,
     message: string,
     readonly details: { field?: string; message: string }[] = [],
+    readonly retryAfter?: number,
   ) {
     super(message);
     this.name = 'ImageServiceError';
@@ -68,30 +76,45 @@ export interface FetchedImage {
   height: number;
 }
 
-export function createClient({ baseUrl, fetch: fetchImpl = globalThis.fetch, signer }: ClientOptions) {
+const RETRYABLE = new Set([429, 503]);
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export function createClient({ baseUrl, fetch: fetchImpl = globalThis.fetch, signer, apiKey, retry }: ClientOptions) {
   const base = baseUrl.replace(/\/+$/, '');
 
-  function pathFor(path: string, source: string, options: object = {}): string {
+  function pathFor(path: string, source: string, options: object = {}, keyInQuery = false): string {
     const params: Record<string, string> = { url: source };
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) params[key] = String(value);
     }
+    if (apiKey && keyInQuery) params.api_key = apiKey;
     if (signer) params.signature = signer(path, params);
     return `${path}?${new URLSearchParams(params).toString()}`;
   }
 
+  async function toError(res: Response): Promise<ImageServiceError> {
+    const body = (await res.json().catch(() => undefined)) as ApiErrorBody | undefined;
+    const retryAfter = Number(res.headers.get('retry-after'));
+    return new ImageServiceError(
+      res.status,
+      body?.error.code ?? 'UNKNOWN',
+      body?.error.message ?? `Request failed with HTTP ${res.status}`,
+      body?.error.details,
+      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+    );
+  }
+
   async function request(path: string): Promise<Response> {
-    const res = await fetchImpl(`${base}${path}`);
-    if (!res.ok) {
-      const body = (await res.json().catch(() => undefined)) as ApiErrorBody | undefined;
-      throw new ImageServiceError(
-        res.status,
-        body?.error.code ?? 'UNKNOWN',
-        body?.error.message ?? `Request failed with HTTP ${res.status}`,
-        body?.error.details,
-      );
+    const headers: Record<string, string> = apiKey ? { 'x-api-key': apiKey } : {};
+    const attempts = retry?.attempts ?? 0;
+    for (let attempt = 0; ; attempt++) {
+      const res = await fetchImpl(`${base}${path}`, { headers });
+      if (res.ok) return res;
+      const error = await toError(res);
+      if (!RETRYABLE.has(res.status) || attempt >= attempts) throw error;
+      const delay = error.retryAfter ? error.retryAfter * 1000 : 2 ** attempt * 500;
+      await sleep(Math.min(delay, retry?.maxDelayMs ?? 30_000));
     }
-    return res;
   }
 
   async function toImage(res: Response): Promise<FetchedImage> {
@@ -105,11 +128,11 @@ export function createClient({ baseUrl, fetch: fetchImpl = globalThis.fetch, sig
 
   const client = {
     url(source: string, options: TransformOptions = {}): string {
-      return `${base}${pathFor('/process', source, options)}`;
+      return `${base}${pathFor('/process', source, options, true)}`;
     },
 
     thumbnailUrl(source: string, options: ThumbnailOptions = {}): string {
-      return `${base}${pathFor('/video/thumbnail', source, options)}`;
+      return `${base}${pathFor('/video/thumbnail', source, options, true)}`;
     },
 
     async fetch(source: string, options: TransformOptions = {}): Promise<FetchedImage> {

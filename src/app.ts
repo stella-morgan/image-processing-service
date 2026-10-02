@@ -1,9 +1,11 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { type Config, loadConfig } from './config.js';
 import { registerDocs } from './docs.js';
+import { redactSecrets } from './lib/apiKeys.js';
 import { ApiError } from './lib/errors.js';
 import { CROP_MODES, GRAVITIES, OUTPUT_FORMATS } from './lib/params.js';
 import { verifySignature } from './lib/signing.js';
+import { registerRateLimit } from './rateLimit.js';
 import { processRoutes } from './routes/process.js';
 import { videoRoutes } from './routes/video.js';
 import { createServices, type Services } from './services.js';
@@ -19,14 +21,23 @@ declare module 'fastify' {
   }
 }
 
-const SIGNED_ROUTES = new Set(['/process', '/video/thumbnail', '/info']);
+const PROTECTED_ROUTES = new Set(['/process', '/video/thumbnail', '/info']);
 
 export async function buildApp(options: BuildOptions = {}): Promise<FastifyInstance> {
   const config: Config = { ...loadConfig(), ...options.config };
   const services = createServices(config);
 
   const app = Fastify({
-    logger: options.logger === false ? false : { level: config.logLevel },
+    logger:
+      options.logger === false
+        ? false
+        : {
+            level: config.logLevel,
+            serializers: {
+              req: (req) => ({ method: req.method, url: redactSecrets(req.url), remoteAddress: req.ip }),
+            },
+          },
+    trustProxy: config.trustProxy,
     requestIdHeader: 'x-request-id',
     genReqId: () => crypto.randomUUID(),
   });
@@ -37,11 +48,13 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
     reply.header('X-Request-Id', request.id);
   });
 
+  const rateLimitStatus = await registerRateLimit(app, config, PROTECTED_ROUTES);
+
   if (config.signingSecret) {
     const secret = config.signingSecret;
-    app.addHook('onRequest', async (request) => {
-      const path = request.url.split('?')[0]!;
-      if (!SIGNED_ROUTES.has(path)) return;
+    app.addHook('preValidation', async (request) => {
+      const path = request.routeOptions.url ?? '';
+      if (!PROTECTED_ROUTES.has(path)) return;
       if (!verifySignature(secret, path, request.query as Record<string, unknown>)) {
         throw new ApiError('INVALID_SIGNATURE');
       }
@@ -97,6 +110,9 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
       signature: config.signingSecret
         ? 'Required: HMAC-SHA256 of the request (see README).'
         : 'Not required (signing disabled).',
+      'api_key | X-API-Key header': config.requireApiKey
+        ? 'Required: identifies the client for rate limiting.'
+        : 'Optional: identifies the client for rate limiting; anonymous requests are limited per IP.',
     },
     example: '/process?url=https://picsum.photos/id/237/1200/800.jpg&width=500&height=300&crop=fill&format=webp',
   }));
@@ -105,6 +121,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
     status: 'ok',
     uptimeSeconds: Math.round(process.uptime()),
     jobs: services.limiter.stats,
+    rateLimit: rateLimitStatus(),
   }));
 
   await registerDocs(app);

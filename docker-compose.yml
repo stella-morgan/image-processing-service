@@ -1,0 +1,22 @@
+services:
+  redis:
+    image: redis:8
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      retries: 10
+
+  api-1: &api
+    build: .
+    environment:
+      REDIS_URL: redis://redis:6379
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-60}
+      API_KEYS: ${API_KEYS:-}
+    ports: ['3001:3000']
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  api-2:
+    <<: *api
+    ports: ['3002:3000']

@@ -11,7 +11,13 @@ servers:
 
 security:
   - {}
+  - apiKeyHeader: []
+  - apiKeyQuery: []
   - urlSignature: []
+  - apiKeyHeader: []
+    urlSignature: []
+  - apiKeyQuery: []
+    urlSignature: []
 
 paths:
   /process:
@@ -31,11 +37,13 @@ paths:
         '200': { $ref: '#/components/responses/Image' }
         '304': { description: Not modified (If-None-Match matched the ETag). }
         '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '413': { $ref: '#/components/responses/Error' }
         '415': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '502': { $ref: '#/components/responses/Error' }
         '503': { $ref: '#/components/responses/Busy' }
         '504': { $ref: '#/components/responses/Error' }
@@ -62,9 +70,11 @@ paths:
         '200': { $ref: '#/components/responses/Image' }
         '304': { description: Not modified. }
         '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
         '403': { $ref: '#/components/responses/Error' }
         '415': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/Busy' }
 
   /info:
@@ -76,11 +86,17 @@ paths:
       responses:
         '200':
           description: Image metadata
+          headers:
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimit-Limit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimit-Remaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimit-Reset' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ImageInfo' }
         '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
         '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 
   /health:
     get:
@@ -102,9 +118,25 @@ paths:
                     properties:
                       active: { type: integer }
                       queued: { type: integer }
+                  rateLimit:
+                    type: object
+                    properties:
+                      enabled: { type: boolean }
+                      store: { type: string, enum: [memory, redis] }
+                      connected: { type: boolean }
 
 components:
   securitySchemes:
+    apiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Identifies the client for rate limiting. Optional unless the server sets REQUIRE_API_KEY.
+    apiKeyQuery:
+      type: apiKey
+      in: query
+      name: api_key
+      description: Same as X-API-Key, for image URLs embedded in web pages, which cannot send headers.
     urlSignature:
       type: apiKey
       in: query
@@ -163,6 +195,15 @@ components:
     X-Image-Width: { schema: { type: integer } }
     X-Image-Height: { schema: { type: integer } }
     X-Request-Id: { schema: { type: string } }
+    RateLimit-Limit:
+      description: Requests allowed per window for this client.
+      schema: { type: integer }
+    RateLimit-Remaining:
+      description: Requests left in the current window.
+      schema: { type: integer }
+    RateLimit-Reset:
+      description: Seconds until the window resets.
+      schema: { type: integer }
 
   responses:
     Image:
@@ -173,6 +214,9 @@ components:
         X-Image-Width: { $ref: '#/components/headers/X-Image-Width' }
         X-Image-Height: { $ref: '#/components/headers/X-Image-Height' }
         X-Request-Id: { $ref: '#/components/headers/X-Request-Id' }
+        RateLimit-Limit: { $ref: '#/components/headers/RateLimit-Limit' }
+        RateLimit-Remaining: { $ref: '#/components/headers/RateLimit-Remaining' }
+        RateLimit-Reset: { $ref: '#/components/headers/RateLimit-Reset' }
       content:
         image/jpeg: { schema: { type: string, format: binary } }
         image/png: { schema: { type: string, format: binary } }
@@ -182,6 +226,16 @@ components:
         image/tiff: { schema: { type: string, format: binary } }
     Error:
       description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Rate limit exceeded for this client
+      headers:
+        Retry-After: { schema: { type: integer } }
+        RateLimit-Limit: { $ref: '#/components/headers/RateLimit-Limit' }
+        RateLimit-Remaining: { $ref: '#/components/headers/RateLimit-Remaining' }
+        RateLimit-Reset: { $ref: '#/components/headers/RateLimit-Reset' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -207,6 +261,7 @@ components:
               enum:
                 - INVALID_PARAMETER
                 - INVALID_URL
+                - INVALID_API_KEY
                 - INVALID_SIGNATURE
                 - FORBIDDEN_URL
                 - NOT_FOUND
@@ -214,6 +269,7 @@ components:
                 - SOURCE_TOO_LARGE
                 - UNSUPPORTED_MEDIA_TYPE
                 - UNPROCESSABLE_SOURCE
+                - RATE_LIMITED
                 - SOURCE_FETCH_FAILED
                 - SOURCE_TIMEOUT
                 - INTERNAL_ERROR

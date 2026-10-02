@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
     testTimeout: 20_000,
+    env: { RATE_LIMIT_MAX: '0' },
     coverage: {
       include: ['src/**/*.ts'],
       exclude: ['src/index.ts'],
