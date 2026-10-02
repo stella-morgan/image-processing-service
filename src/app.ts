@@ -4,6 +4,7 @@ import { ApiError } from './lib/errors.js';
 import { CROP_MODES, GRAVITIES, OUTPUT_FORMATS } from './lib/params.js';
 import { verifySignature } from './lib/signing.js';
 import { processRoutes } from './routes/process.js';
+import { videoRoutes } from './routes/video.js';
 import { createServices, type Services } from './services.js';
 
 export interface BuildOptions {
@@ -17,7 +18,7 @@ declare module 'fastify' {
   }
 }
 
-const SIGNED_ROUTES = new Set(['/process', '/info']);
+const SIGNED_ROUTES = new Set(['/process', '/video/thumbnail', '/info']);
 
 export async function buildApp(options: BuildOptions = {}): Promise<FastifyInstance> {
   const config: Config = { ...loadConfig(), ...options.config };
@@ -77,6 +78,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
     name: 'image-processing-service',
     endpoints: {
       'GET /process': 'Resize, crop and convert a remote image.',
+      'GET /video/thumbnail': 'Extract a frame from a remote video as an image.',
       'GET /info': 'Return metadata (format, dimensions, size) for a remote image.',
       'GET /health': 'Liveness check.',
     },
@@ -89,6 +91,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
       'crop | c': `Resize mode: ${CROP_MODES.join(', ')}. Defaults to scale.`,
       'gravity | g': `Anchor for crop=fill only: ${GRAVITIES.join(', ')}. Defaults to center.`,
       'background | b': 'Hex colour (ff0000) or "transparent", for crop=pad or flattening to jpeg.',
+      'time | t': 'Video thumbnail only: timestamp in seconds. Defaults to 0.',
       signature: config.signingSecret
         ? 'Required: HMAC-SHA256 of the request (see README).'
         : 'Not required (signing disabled).',
@@ -103,6 +106,7 @@ export async function buildApp(options: BuildOptions = {}): Promise<FastifyInsta
   }));
 
   await app.register(processRoutes, { services });
+  await app.register(videoRoutes, { services });
 
   app.addHook('onClose', async () => {
     await services.fetcher.close();
